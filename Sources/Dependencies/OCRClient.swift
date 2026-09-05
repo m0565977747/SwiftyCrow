@@ -3,10 +3,8 @@
 
 import ComposableArchitecture
 import CoreGraphics
-import CoreText
 import DependenciesMacros
 import Foundation
-import Vision
 
 // MARK: - OCRClient
 
@@ -21,166 +19,24 @@ struct OCRClient {
 // MARK: DependencyKey
 
 extension OCRClient: DependencyKey {
+  /// macOS 26 gets Apple's document-layout recognizer; everything older runs
+  /// the classic `VNRecognizeTextRequest` pipeline with geometric layout
+  /// inference. Both share the post-processing helpers below.
   static let liveValue = OCRClient(
     recognizeText: { image, language in
-      // A capture that starts while the proactive probe is loading the model
-      // joins that work instead of issuing a second cold Vision request.
-      await VisionWarmUp.shared.waitForInFlight()
-      var request = RecognizeDocumentsRequest()
-      if language.isAuto {
-        request.textRecognitionOptions.automaticallyDetectLanguage = true
+      if #available(macOS 26.0, *) {
+        return try await ModernOCRPipeline.recognizeText(in: image, language: language)
       } else {
-        request.textRecognitionOptions.recognitionLanguages = [Locale.Language(identifier: language.code)]
+        return try await VenturaOCRPipeline.recognizeText(in: image, language: language)
       }
-      let clock = ContinuousClock()
-      let started = clock.now
-      let observations = try await request.perform(on: image)
-      // Always timed: a cold model load and a genuine stall look identical from
-      // the UI, and the duration is the only thing that separates them.
-      let elapsed = clock.now - started
-      if elapsed > .seconds(2) {
-        Log.ocr.error("Recognition took \(elapsed.loggedSeconds, privacy: .public)s — model was cold")
-      } else {
-        Log.ocr.debug("Recognition took \(elapsed.loggedSeconds, privacy: .public)s")
-      }
-
-      // Vision's paragraph grouping is semantic, not typographic. A large title
-      // and a smaller subtitle can therefore arrive as one paragraph even
-      // though they need different font scale, color, and translation frames.
-      // Start from Vision's line geometry and conservatively stitch only lines
-      // with matching scale/alignment below.
-      let postProcessingStarted = clock.now
-      let paragraphs = observations.flatMap(\.document.paragraphs)
-      var nextRecognitionGroupID = 0
-      var lines = paragraphs.flatMap { paragraph in
-        let alignment = paragraph.textAlignment?.overlayTextAlignment
-        let paragraphWords = paragraph.words?.compactMap { observation -> RecognizedWord? in
-          guard let text = observation.topCandidates(1).first?.string.trimmed, !text.isEmpty else {
-            return nil
-          }
-          return RecognizedWord(
-            text: text,
-            box: Self.topLeftBox(observation.boundingRegion.boundingBox.cgRect)
-          )
-        } ?? []
-        let recognizedLines = paragraph.lines.compactMap { observation -> (
-          observation: RecognizedTextObservation,
-          candidate: RecognizedText,
-          transcript: String
-        )? in
-          guard
-            let candidate = observation.topCandidates(1).first,
-            !candidate.string.trimmed.isEmpty
-          else {
-            return nil
-          }
-          return (
-            observation: observation,
-            candidate: candidate,
-            transcript: candidate.string.trimmed
-          )
-        }
-        let segmentIndices = OCRParagraphLineGrouping.segmentIndices(
-          paragraphTranscript: paragraph.transcript,
-          lineTranscripts: recognizedLines.map(\.transcript)
-        )
-        let groupBase = nextRecognitionGroupID
-        nextRecognitionGroupID += max(1, (segmentIndices.max() ?? 0) + 1)
-        let mapped = recognizedLines.enumerated().map { lineIndex, recognizedLine -> OCRResult.Line in
-          let observation = recognizedLine.observation
-          let transcript = recognizedLine.transcript
-          let box = Self.topLeftBox(observation.boundingRegion.boundingBox.cgRect)
-          let isVertical = observation.textDirection == .topToBottom
-          let documentWords = paragraphWords.filter { word in
-            let intersection = box.intersection(word.box)
-            return !intersection.isNull
-              && intersection.width * intersection.height
-              / max(0.000_001, word.box.width * word.box.height) >= 0.72
-          }
-          // Document paragraphs do not always expose `words` (notably dense
-          // Japanese educational pages). The line candidate still provides
-          // Apple's exact range geometry, so use it to retain punctuation,
-          // mixed colors, and inline styles instead of flattening the line.
-          let geometricWords = Self.geometricWords(in: recognizedLine.candidate)
-          let words = geometricWords.isEmpty ? documentWords : geometricWords
-          let wordBoxes = words.map(\.box)
-          let patches = (wordBoxes.isEmpty ? [box] : wordBoxes).map {
-            OverlaySourcePatch(box: $0)
-          }
-          let horizontalGlyphScale = isVertical
-            ? 0
-            : Self.median(wordBoxes.map(\.height)) ?? box.height
-          return OCRResult.Line(
-            boundingBoxNormalized: box,
-            text: transcript,
-            isVerticalBlock: isVertical,
-            verticalCharScale: isVertical ? box.width : 0,
-            horizontalGlyphScale: horizontalGlyphScale,
-            recognitionGroupID: groupBase + segmentIndices[lineIndex],
-            replacementPatches: patches,
-            styleRuns: Self.styleRuns(in: transcript, words: words),
-            alignment: alignment
-          )
-        }
-        guard mapped.isEmpty else { return mapped }
-
-        let transcript = paragraph.transcript.trimmed
-        guard !transcript.isEmpty else { return [] }
-        let box = Self.topLeftBox(paragraph.boundingRegion.boundingBox.cgRect)
-        return [
-          OCRResult.Line(
-            boundingBoxNormalized: box,
-            text: transcript,
-            rowCount: 1,
-            recognitionGroupID: groupBase,
-            replacementPatches: [OverlaySourcePatch(box: box)],
-            alignment: alignment
-          )
-        ]
-      }
-      if Self.shouldRunSupplementalRecognition(for: lines, language: language) {
-        do {
-          let supplementalStarted = clock.now
-          let supplemental = try await Self.supplementalLines(in: image, language: language)
-          let previousCount = lines.count
-          lines = OCRSupplementalMerger.addingUncovered(supplemental, to: lines)
-          Log.ocr.debug(
-            "Supplemental recognition added \(lines.count - previousCount, privacy: .public) lines in \((clock.now - supplementalStarted).loggedSeconds, privacy: .public)s"
-          )
-        } catch {
-          // Document recognition remains a complete result on its own. Surface
-          // the supplemental failure, but do not turn a successful capture into
-          // an error merely because the recall pass was unavailable.
-          Log.ocr.error(
-            "Supplemental recognition failed: \(error.localizedDescription, privacy: .public)"
-          )
-        }
-      }
-      let correctedLines: [OCRResult.Line]
-      let languageCode = language.localeLanguage.languageCode?.identifier
-      if language.isAuto || languageCode == "ja" {
-        do {
-          correctedLines = try await JapaneseRubyOCRCorrector.correcting(lines, in: image)
-        } catch {
-          Log.ocr.error(
-            "Base-glyph OCR failed: \(error.localizedDescription, privacy: .public)"
-          )
-          correctedLines = lines
-        }
-      } else {
-        correctedLines = lines
-      }
-      let result = await OverlaySourceAppearanceAnalyzer.applyingAppearances(
-        to: OCRResult(lines: correctedLines).removingNestedDuplicates(),
-        from: image
-      ).coalescingParagraphFragments()
-      let postProcessingElapsed = clock.now - postProcessingStarted
-      Log.ocr.debug(
-        "Post-processing produced \(result.lines.count, privacy: .public) lines in \(postProcessingElapsed.loggedSeconds, privacy: .public)s"
-      )
-      return result
     },
-    warmUp: { await VisionWarmUp.shared.run() }
+    warmUp: {
+      if #available(macOS 26.0, *) {
+        await ModernOCRPipeline.warmUp()
+      } else {
+        await VenturaOCRPipeline.warmUp()
+      }
+    }
   )
 }
 
@@ -239,17 +95,23 @@ enum OCRParagraphLineGrouping {
   }
 }
 
+// MARK: - Shared recognition helpers
+
+/// Pure geometry/text helpers shared by `ModernOCRPipeline` (macOS 26) and
+/// `VenturaOCRPipeline` (macOS 13+). Nothing here touches Vision.
 extension OCRClient {
-  fileprivate struct RecognizedWord {
+  struct RecognizedWord: Equatable, Sendable {
     var text: String
     var box: CGRect
   }
 
-  fileprivate static func topLeftBox(_ box: CGRect) -> CGRect {
+  /// Vision reports normalized boxes with a bottom-left origin; the overlay
+  /// model uses top-left.
+  static func topLeftBox(_ box: CGRect) -> CGRect {
     CGRect(x: box.minX, y: 1 - box.maxY, width: box.width, height: box.height)
   }
 
-  fileprivate static func median(_ values: [CGFloat]) -> CGFloat? {
+  static func median(_ values: [CGFloat]) -> CGFloat? {
     guard !values.isEmpty else { return nil }
     let sorted = values.sorted()
     let middle = sorted.count / 2
@@ -259,7 +121,7 @@ extension OCRClient {
     return sorted[middle]
   }
 
-  fileprivate static func styleRuns(
+  static func styleRuns(
     in transcript: String,
     words: [RecognizedWord]
   ) -> [OverlaySourceStyleRun] {
@@ -281,52 +143,7 @@ extension OCRClient {
     return runs
   }
 
-  fileprivate static func geometricWords(in candidate: RecognizedText) -> [RecognizedWord] {
-    OCRTextTokenization.ranges(in: candidate.string).compactMap { range in
-      guard let observation = candidate.boundingBox(for: range) else { return nil }
-      return RecognizedWord(
-        text: String(candidate.string[range]),
-        box: topLeftBox(observation.boundingBox.cgRect)
-      )
-    }
-  }
-
-  fileprivate static func supplementalLines(
-    in image: CGImage,
-    language: Language
-  ) async throws -> [OCRResult.Line] {
-    var request = RecognizeTextRequest()
-    request.recognitionLevel = .accurate
-    request.usesLanguageCorrection = true
-    if language.isAuto {
-      request.automaticallyDetectsLanguage = true
-    } else {
-      request.recognitionLanguages = [language.localeLanguage]
-    }
-    return try await request.perform(on: image).compactMap { observation in
-      guard
-        let candidate = observation.topCandidates(1).first,
-        candidate.confidence >= 0.25,
-        !candidate.string.trimmed.isEmpty
-      else { return nil }
-      let text = candidate.string.trimmed
-      let box = topLeftBox(observation.boundingRegion.boundingBox.cgRect)
-      let words = geometricWords(in: candidate)
-      let wordBoxes = words.map(\.box)
-      return OCRResult.Line(
-        boundingBoxNormalized: box,
-        text: text,
-        horizontalGlyphScale: median(wordBoxes.map(\.height)) ?? box.height,
-        replacementPatches: (wordBoxes.isEmpty ? [box] : wordBoxes).map {
-          OverlaySourcePatch(box: $0)
-        },
-        styleRuns: styleRuns(in: text, words: words),
-        alignment: inferredSupplementalAlignment(for: box)
-      )
-    }
-  }
-
-  fileprivate static func shouldRunSupplementalRecognition(
+  static func shouldRunSupplementalRecognition(
     for lines: [OCRResult.Line],
     language: Language
   ) -> Bool {
@@ -339,11 +156,11 @@ extension OCRClient {
     return true
   }
 
-  fileprivate static func inferredSupplementalAlignment(for box: CGRect) -> OverlayTextAlignment {
+  static func inferredSupplementalAlignment(for box: CGRect) -> OverlayTextAlignment {
     box.width >= 0.35 && abs(box.midX - 0.5) <= 0.06 ? .center : .leading
   }
 
-  fileprivate static func isJapaneseScalar(_ scalar: Unicode.Scalar) -> Bool {
+  static func isJapaneseScalar(_ scalar: Unicode.Scalar) -> Bool {
     switch scalar.value {
     case 0x3040 ... 0x30FF,
          0x31F0 ... 0x31FF:
@@ -490,17 +307,6 @@ enum OCRTextTokenization {
   }
 }
 
-extension DocumentObservation.Container.Text.Alignment {
-  fileprivate var overlayTextAlignment: OverlayTextAlignment {
-    switch self {
-    case .center: .center
-    case .leading: .leading
-    case .trailing: .trailing
-    @unknown default: .center
-    }
-  }
-}
-
 extension DependencyValues {
   var ocr: OCRClient {
     get { self[OCRClient.self] }
@@ -509,111 +315,8 @@ extension DependencyValues {
 }
 
 extension StringProtocol {
-  fileprivate var trimmed: String {
+  /// Shared by both OCR pipelines.
+  var trimmed: String {
     trimmingCharacters(in: .whitespacesAndNewlines)
   }
-}
-
-// MARK: - VisionWarmUp
-
-/// Loads Vision's document-recognition model ahead of any real capture.
-///
-/// The first `RecognizeDocumentsRequest` after the system's shared model cache
-/// goes cold costs tens of seconds — ~40s measured here, against ~0.25s once it's
-/// loaded — and the cache goes cold again on its own while the app sits idle.
-/// Paying that on the capture the user just asked for is what made Live and
-/// Capture look like they had hung: a spinner, then nothing.
-///
-/// So the load happens in the background instead — at launch, on wake, and while
-/// the user is still dragging out a region. Nothing here makes a cold load
-/// faster; it moves the cost to a moment when nobody is waiting on it.
-private actor VisionWarmUp {
-
-  // MARK: Internal
-
-  static let shared = VisionWarmUp()
-
-  /// Concurrent callers share one load, so a capture that starts mid-load joins
-  /// it instead of queueing a second one — and a caller that gives up doesn't
-  /// take the load down with it.
-  ///
-  /// Deliberately not memoized across calls: the shared cache goes cold whenever
-  /// the system decides to, and there's no API to ask whether it has. Re-probing
-  /// costs ~0.1s while it's still warm, which is far cheaper than being wrong.
-  func run() async {
-    guard let probe = Self.probe else { return }
-    if let inFlight {
-      await inFlight.value
-      return
-    }
-    let load = Task<Void, Never> {
-      let clock = ContinuousClock()
-      let started = clock.now
-      var request = RecognizeDocumentsRequest()
-      request.textRecognitionOptions.automaticallyDetectLanguage = true
-      do {
-        _ = try await request.perform(on: probe)
-        var supplemental = RecognizeTextRequest()
-        supplemental.recognitionLevel = .accurate
-        supplemental.automaticallyDetectsLanguage = true
-        _ = try await supplemental.perform(on: probe)
-        let elapsed = clock.now - started
-        if elapsed > .seconds(2) {
-          Log.ocr.log("Warm-up loaded a cold model in \(elapsed.loggedSeconds, privacy: .public)s")
-        } else {
-          Log.ocr.debug("Warm-up found the model ready (\(elapsed.loggedSeconds, privacy: .public)s)")
-        }
-      } catch {
-        Log.ocr.error("Warm-up failed: \(error.localizedDescription, privacy: .public)")
-      }
-    }
-    inFlight = load
-    await load.value
-    inFlight = nil
-  }
-
-  func waitForInFlight() async {
-    if let inFlight {
-      await inFlight.value
-    }
-  }
-
-  // MARK: Private
-
-  /// Small, but with real text drawn on it: a blank image lets Vision finish
-  /// without ever loading the recognition model, which would warm nothing.
-  private static let probe: CGImage? = {
-    let width = 256
-    let height = 64
-    guard
-      let context = CGContext(
-        data: nil,
-        width: width,
-        height: height,
-        bitsPerComponent: 8,
-        bytesPerRow: 0,
-        space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-      )
-    else { return nil }
-    context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-    context.fill(CGRect(x: 0, y: 0, width: width, height: height))
-    let attributed = NSAttributedString(
-      string: "Warm up 123",
-      attributes: [
-        NSAttributedString.Key(kCTFontAttributeName as String): CTFontCreateWithName("Helvetica" as CFString, 32, nil),
-        NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(
-          red: 0,
-          green: 0,
-          blue: 0,
-          alpha: 1
-        ),
-      ]
-    )
-    context.textPosition = CGPoint(x: 8, y: 18)
-    CTLineDraw(CTLineCreateWithAttributedString(attributed), context)
-    return context.makeImage()
-  }()
-
-  private var inFlight: Task<Void, Never>?
 }

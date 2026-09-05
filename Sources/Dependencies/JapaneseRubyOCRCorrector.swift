@@ -8,10 +8,15 @@ import Vision
 // MARK: - JapaneseRubyOCRCorrector
 
 /// Re-reads the base-glyph portion of large horizontal Japanese rows in one
-/// contact sheet. `RecognizeDocumentsRequest` is excellent at page structure,
-/// but dense furigana can be fused with the base characters. A single accurate
-/// `RecognizeTextRequest` over the lower part of those rows preserves the page
-/// geometry while giving Apple's Japanese recognizer a clean glyph image.
+/// contact sheet. Page-level recognition is excellent at structure, but dense
+/// furigana can be fused with the base characters. A single accurate Japanese
+/// text request over the lower part of those rows preserves the page geometry
+/// while giving Apple's Japanese recognizer a clean glyph image.
+///
+/// Uses the classic `VNRecognizeTextRequest` on every OS (through
+/// `ClassicVisionTextRecognizer`): it exists from macOS 13 through 26, and for
+/// a single-language accurate pass its output matches the Swift-only
+/// `RecognizeTextRequest`, so one code path serves both pipelines.
 enum JapaneseRubyOCRCorrector {
 
   // MARK: Internal
@@ -147,19 +152,19 @@ enum JapaneseRubyOCRCorrector {
 
   // MARK: Private
 
-  private struct Input {
+  private struct Input: Sendable {
     var lineIndex: Int
     var original: String
     var crop: CGImage
   }
 
-  private struct Slot {
+  private struct Slot: Sendable {
     var lineIndex: Int
     var original: String
     var frame: CGRect
   }
 
-  private struct Candidate {
+  private struct Candidate: Sendable {
     var lineIndex: Int
     var text: String
     var confidence: Float
@@ -210,32 +215,37 @@ enum JapaneseRubyOCRCorrector {
 
   private static func corrections(in inputs: [Input]) async throws -> [Int: Candidate] {
     guard let sheet = contactSheet(for: inputs) else { return [:] }
-    var request = RecognizeTextRequest()
-    request.recognitionLevel = .accurate
-    request.recognitionLanguages = [Locale.Language(identifier: "ja-JP")]
-    request.usesLanguageCorrection = true
-    let observations = try await request.perform(on: sheet.image)
-
-    var candidates = [Int: [Candidate]]()
-    for observation in observations {
-      let box = observation.boundingRegion.boundingBox.cgRect
-      let center = CGPoint(
-        x: box.midX * CGFloat(sheet.image.width),
-        y: box.midY * CGFloat(sheet.image.height)
-      )
-      guard
-        let slot = sheet.slots.first(where: {
-          $0.frame.insetBy(dx: -CGFloat(padding), dy: -CGFloat(padding) / 2).contains(center)
-        })
-      else { continue }
-      for (rank, recognized) in observation.topCandidates(3).enumerated() {
-        candidates[slot.lineIndex, default: []].append(Candidate(
-          lineIndex: slot.lineIndex,
-          text: recognized.string,
-          confidence: recognized.confidence,
-          rank: rank
-        ))
+    let slots = sheet.slots
+    let sheetWidth = CGFloat(sheet.image.width)
+    let sheetHeight = CGFloat(sheet.image.height)
+    let candidates = try await ClassicVisionTextRecognizer.recognize(
+      in: sheet.image,
+      configuration: ClassicVisionTextRecognizer.Configuration(recognitionLanguages: ["ja-JP"])
+    ) { observations -> [Int: [Candidate]] in
+      var candidates = [Int: [Candidate]]()
+      for observation in observations {
+        // Vision's box and the slot frames both use a bottom-left origin on the
+        // contact sheet, so the center maps straight onto a slot.
+        let box = observation.boundingBox
+        let center = CGPoint(
+          x: box.midX * sheetWidth,
+          y: box.midY * sheetHeight
+        )
+        guard
+          let slot = slots.first(where: {
+            $0.frame.insetBy(dx: -CGFloat(padding), dy: -CGFloat(padding) / 2).contains(center)
+          })
+        else { continue }
+        for (rank, recognized) in observation.topCandidates(3).enumerated() {
+          candidates[slot.lineIndex, default: []].append(Candidate(
+            lineIndex: slot.lineIndex,
+            text: recognized.string,
+            confidence: recognized.confidence,
+            rank: rank
+          ))
+        }
       }
+      return candidates
     }
 
     return candidates.compactMapValues { values in
