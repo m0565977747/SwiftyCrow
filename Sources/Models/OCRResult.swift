@@ -356,10 +356,10 @@ struct OCRResult: Equatable, Sendable {
     }
     guard formsOneCompactRun else { return false }
 
-    let compactSurfaceCount = fragments.count(where: hasCompactSurface)
-    let appearanceTransitions = zip(ordered, ordered.dropFirst()).count { lhs, rhs in
+    let compactSurfaceCount = fragments.filter(hasCompactSurface).count
+    let appearanceTransitions = zip(ordered, ordered.dropFirst()).filter { lhs, rhs in
       colorDistance(lines[lhs].appearance.background, lines[rhs].appearance.background) >= 0.12
-    }
+    }.count
     return compactSurfaceCount >= 2 || appearanceTransitions >= 3
   }
 
@@ -927,11 +927,11 @@ struct OCRResult: Equatable, Sendable {
       !CharacterSet.whitespacesAndNewlines.contains($0)
     }
     guard !scalars.isEmpty, scalars.count <= 24 else { return false }
-    let kanaCount = scalars.count(where: isKana)
-    let nonPunctuationCount = scalars.count {
+    let kanaCount = scalars.filter(isKana).count
+    let nonPunctuationCount = scalars.filter {
       !CharacterSet.punctuationCharacters.contains($0)
         && !CharacterSet.symbols.contains($0)
-    }
+    }.count
     return kanaCount > 0 && kanaCount * 4 >= max(1, nonPunctuationCount) * 3
   }
 

@@ -1,2 +1,4 @@
 [tools]
+# TODO(ventura-backport): pin to the exact Tuist version printed by the first
+# successful "Build (Ventura backport)" CI run so local and CI graphs match.
 tuist = "latest"

@@ -333,7 +333,7 @@ struct OverlayLine: Equatable, Identifiable, Sendable {
     }
 
     private static func visibleTextLength(_ text: String) -> Int {
-      text.unicodeScalars.count(where: { CharacterSet.alphanumerics.contains($0) })
+      text.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.count
     }
 
     private static func hasSameOrientation(_ lhs: OverlaySourceLayout, _ rhs: OverlaySourceLayout) -> Bool {

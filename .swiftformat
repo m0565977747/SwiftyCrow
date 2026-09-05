@@ -138,7 +138,8 @@
 --rules semicolons
 --rules propertyTypes
 --rules blankLinesBetweenChainedFunctions
---rules preferCountWhere
+# preferCountWhere is intentionally off: `count(where:)` is Swift 6 stdlib
+# (macOS 15 runtime) and the app deploys to macOS 13 — use `.filter { }.count`.
 --rules modifiersOnSameLine
 --rules redundantThrows
 --rules redundantAsync

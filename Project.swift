@@ -75,6 +75,9 @@ let project = Project(
       dependencies: [
         .external(name: "ComposableArchitecture"),
         .external(name: "DependenciesMacros"),
+        // Ventura backport: `@Perceptible` / `WithPerceptionTracking` back-deploy
+        // Observation to macOS 13 (TCA already depends on it transitively).
+        .external(name: "Perception"),
         .external(name: "Sharing"),
         .external(name: "Magnet"),
         .external(name: "TOML"),

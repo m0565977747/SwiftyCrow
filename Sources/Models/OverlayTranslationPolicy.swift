@@ -75,8 +75,8 @@ enum OverlayTranslationPolicy {
       !CharacterSet.whitespacesAndNewlines.contains($0)
     }
     guard !scalars.isEmpty, scalars.count <= 16 else { return false }
-    let letters = scalars.count(where: CharacterSet.letters.contains)
-    let digits = scalars.count(where: CharacterSet.decimalDigits.contains)
+    let letters = scalars.filter(CharacterSet.letters.contains).count
+    let digits = scalars.filter(CharacterSet.decimalDigits.contains).count
     return digits > 0 && letters <= 1
   }
 
@@ -92,8 +92,8 @@ enum OverlayTranslationPolicy {
     return text.split(whereSeparator: \.isWhitespace).contains { token in
       let letters = token.unicodeScalars.filter(CharacterSet.letters.contains)
       guard letters.count >= 2 else { return false }
-      let uppercase = letters.count(where: CharacterSet.uppercaseLetters.contains)
-      let lowercase = letters.count(where: CharacterSet.lowercaseLetters.contains)
+      let uppercase = letters.filter(CharacterSet.uppercaseLetters.contains).count
+      let lowercase = letters.filter(CharacterSet.lowercaseLetters.contains).count
       return uppercase == letters.count || (uppercase >= 2 && lowercase >= 1)
     }
   }

@@ -493,7 +493,7 @@ enum OverlayLayoutEngine {
     guard !evidence.isEmpty else { return nil }
     let ranked = [OverlayTextAlignment.leading, .center, .trailing]
       .map { alignment in
-        (alignment: alignment, count: evidence.count { $0 == alignment })
+        (alignment: alignment, count: evidence.filter { $0 == alignment }.count)
       }
       .filter { $0.count > 0 }
       .sorted { $0.count > $1.count }

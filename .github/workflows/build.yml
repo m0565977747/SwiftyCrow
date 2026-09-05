@@ -1,0 +1,156 @@
+name: Build (Ventura backport)
+
+# Compiles the macOS 13 (Ventura) backport as a Universal 2 (arm64 + x86_64)
+# Release app, runs the unit tests, and verifies the produced binary really
+# targets macOS 13.0 on both slices. The zipped .app, build log and test log
+# are uploaded as a workflow artifact.
+on:
+  push:
+    branches:
+      - ventura-backport
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    env:
+      # Ad-hoc signing for CI: no team, no certificate. Passed on the xcodebuild
+      # command line so it overrides the Apple Development identity that
+      # Project.swift pins for local Debug builds.
+      TUIST_DEVELOPMENT_TEAM: ""
+      TUIST_SPARKLE_PUBLIC_ED_KEY: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jdx/mise-action@v4
+
+      - name: Toolchain versions
+        run: |
+          set -euo pipefail
+          sw_vers
+          xcodebuild -version
+          swift --version
+          tuist version
+
+      - name: Generate Xcode project
+        run: |
+          set -euo pipefail
+          tuist install
+          tuist generate --no-open
+
+      - name: Build (Release, Universal 2, macOS 13.0)
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -workspace SwiftyCrow.xcworkspace \
+            -scheme SwiftyCrow \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath DerivedData \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            CODE_SIGNING_ALLOWED=YES \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO \
+            MACOSX_DEPLOYMENT_TARGET=13.0 \
+            2>&1 | tee build.log
+          # `tee` masks xcodebuild's exit status only without pipefail; surface
+          # the compiler errors near the end of the job log for quick triage.
+          if grep -qE "(^|: )error:" build.log; then
+            echo "::group::Compiler errors"
+            grep -E "(^|: )error:" build.log || true
+            echo "::endgroup::"
+            exit 1
+          fi
+
+      - name: Test (Debug)
+        run: |
+          set -euo pipefail
+          xcodebuild test \
+            -workspace SwiftyCrow.xcworkspace \
+            -scheme SwiftyCrow \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath DerivedData \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="" \
+            2>&1 | tee test.log
+
+      - name: Verify binary (archs, min OS, signature)
+        run: |
+          set -euo pipefail
+          APP="DerivedData/Build/Products/Release/SwiftyCrow.app"
+          BIN="$APP/Contents/MacOS/SwiftyCrow"
+          test -x "$BIN"
+
+          echo "== Main binary =="
+          lipo -info "$BIN"
+          vtool -show-build "$BIN" | grep -E "minos|platform"
+          /usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist"
+
+          echo "== Embedded frameworks / helpers =="
+          for f in $(find "$APP/Contents/Frameworks" -type f -perm +111 -maxdepth 4 2>/dev/null); do
+            echo "$f"
+            lipo -info "$f" || true
+            vtool -show-build "$f" 2>/dev/null | grep -E "minos" || true
+          done
+
+          echo "== Code signature =="
+          codesign -dv --verbose=2 "$APP" 2>&1 | head
+          codesign --verify --deep --strict "$APP"
+
+          echo "== Checks =="
+          ARCHS="$(lipo -archs "$BIN")"
+          echo "archs: $ARCHS"
+          case " $ARCHS " in
+            *" x86_64 "*) ;;
+            *) echo "::error::SwiftyCrow is missing the x86_64 slice ($ARCHS)"; exit 1 ;;
+          esac
+          case " $ARCHS " in
+            *" arm64 "*) ;;
+            *) echo "::error::SwiftyCrow is missing the arm64 slice ($ARCHS)"; exit 1 ;;
+          esac
+
+          # Every slice must declare minos 13.0 (vtool prints one build block per arch).
+          MINOS="$(vtool -show-build "$BIN" | awk '/minos/ { print $2 }' | sort -u | tr '\n' ' ')"
+          echo "minos: $MINOS"
+          if [ "$(echo "$MINOS" | tr -s ' ' | sed 's/ *$//')" != "13.0" ]; then
+            echo "::error::Expected minos 13.0 on every slice, got: $MINOS"
+            exit 1
+          fi
+
+          LSMIN="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
+          if [ "$LSMIN" != "13.0" ]; then
+            echo "::error::LSMinimumSystemVersion is $LSMIN, expected 13.0"
+            exit 1
+          fi
+
+      - name: Package app
+        if: always()
+        run: |
+          set -euo pipefail
+          APP="DerivedData/Build/Products/Release/SwiftyCrow.app"
+          if [ -d "$APP" ]; then
+            ditto -c -k --keepParent "$APP" SwiftyCrow-ventura.zip
+          else
+            echo "No Release app produced; uploading logs only."
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SwiftyCrow-ventura-${{ github.sha }}
+          if-no-files-found: warn
+          path: |
+            SwiftyCrow-ventura.zip
+            build.log
+            test.log

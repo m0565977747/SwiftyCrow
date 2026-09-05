@@ -45,7 +45,8 @@ struct OverlayView: View {
       }
       .overlay(alignment: .topLeading) {
         // Drag handle: the only way to move the overlay. Use SwiftUI's native
-        // window gesture so dragging remains reliable inside NSHostingView.
+        // window gesture (macOS 15+; an AppKit `performDrag` handle before that)
+        // so dragging remains reliable inside NSHostingView.
         MoveHandle()
           .opacity(showMoveHandle ? 1 : 0)
           .animation(.easeOut(duration: 0.15), value: showMoveHandle)
@@ -55,8 +56,8 @@ struct OverlayView: View {
             height: OverlayChromeMetrics.moveHandleSize.height,
             alignment: .topLeading
           )
-          .contentShape(.rect)
-          .gesture(WindowDragGesture())
+          .contentShape(Rectangle())
+          .compatWindowDrag()
       }
       .overlay(alignment: .topTrailing) {
         HStack(spacing: 6) {
@@ -145,7 +146,7 @@ private struct LiveHandle: View {
       }
       .padding(.horizontal, 7)
       .padding(.vertical, 3)
-      .glassEffect(.regular.tint(isLive ? .red : nil), in: Capsule())
+      .compatGlass(.regular.tint(isLive ? .red : nil), in: Capsule())
     }
     .buttonStyle(.plain)
     .onAppear { pulse = true }
@@ -167,7 +168,7 @@ private struct MoveHandle: View {
       .font(.system(size: 9, weight: .bold))
       .foregroundStyle(.secondary)
       .frame(width: 24, height: 18)
-      .glassEffect(.regular, in: Capsule())
+      .compatGlass(.regular, in: Capsule())
       .help("Drag to move overlay")
       .accessibilityLabel("Move overlay")
       .accessibilityHint("Drag to reposition the translation overlay")
@@ -185,7 +186,7 @@ private struct CloseHandle: View {
         .font(.system(size: 9, weight: .bold))
         .foregroundStyle(.secondary)
         .frame(width: 18, height: 18)
-        .glassEffect(.regular, in: Circle())
+        .compatGlass(.regular, in: Circle())
     }
     .buttonStyle(.plain)
     .help("Close overlay")

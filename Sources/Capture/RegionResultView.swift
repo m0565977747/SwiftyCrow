@@ -3,6 +3,7 @@
 
 import AppKit
 import ComposableArchitecture
+import Perception
 import SwiftUI
 
 struct RegionResultView: View {
@@ -18,29 +19,32 @@ struct RegionResultView: View {
   let onClose: () -> Void
 
   var body: some View {
-    VStack(spacing: 0) {
-      toolbar
-      Divider().opacity(0.4)
-      if store.translationUnavailable {
-        TranslationModelHint()
-      } else if let error = store.lastError, store.imageData != nil {
-        Label(error, systemImage: "exclamationmark.triangle.fill")
-          .font(.caption)
-          .foregroundStyle(.red)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 14)
-          .padding(.vertical, 8)
+    WithPerceptionTracking {
+      VStack(spacing: 0) {
+        toolbar
+        Divider().opacity(0.4)
+        if store.translationUnavailable {
+          TranslationModelHint()
+        } else if let error = store.lastError, store.imageData != nil {
+          Label(error, systemImage: "exclamationmark.triangle.fill")
+            .font(.caption)
+            .foregroundStyle(.red)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+        }
+        content
       }
-      content
-    }
-    .frame(minWidth: 360, minHeight: 280)
-    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-    .task { store.send(.task) }
-    .onAppear(perform: installMonitor)
-    .onDisappear(perform: removeMonitor)
-    .onChange(of: store.finished) { _, finished in
-      if finished { onClose() }
+      .frame(minWidth: 360, minHeight: 280)
+      .compatGlass(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      .task { store.send(.task) }
+      .onAppear(perform: installMonitor)
+      .onDisappear(perform: removeMonitor)
+      // Single-value `onChange` form: the two-parameter variant is macOS 14+.
+      .onChange(of: store.finished) { finished in
+        if finished { onClose() }
+      }
     }
   }
 
@@ -65,7 +69,7 @@ struct RegionResultView: View {
         GeometryReader { proxy in
           Color.clear
             .onAppear { onImageFrame(proxy.frame(in: .global)) }
-            .onChange(of: proxy.frame(in: .global)) { _, frame in onImageFrame(frame) }
+            .onChange(of: proxy.frame(in: .global)) { frame in onImageFrame(frame) }
         }
       )
     }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import ComposableArchitecture
+import Perception
 import SwiftUI
 
 struct MenuBarContent: View {
@@ -11,14 +12,16 @@ struct MenuBarContent: View {
   let store: StoreOf<AppFeature>
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      header
-      CaptureView(store: store.scope(state: \.capture, action: \.capture))
-      overlaySection
-      footer
+    WithPerceptionTracking {
+      VStack(alignment: .leading, spacing: 14) {
+        header
+        CaptureView(store: store.scope(state: \.capture, action: \.capture))
+        overlaySection
+        footer
+      }
+      .padding(16)
+      .frame(width: 300)
     }
-    .padding(16)
-    .frame(width: 300)
   }
 
   // MARK: Private
@@ -52,7 +55,7 @@ struct MenuBarContent: View {
             systemImage: "viewfinder.rectangular"
           )
           .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(.rect)
+          .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.vertical, 8)
@@ -67,7 +70,7 @@ struct MenuBarContent: View {
             systemImage: store.capture.overlayActive ? "eye.slash" : "viewfinder"
           )
           .frame(maxWidth: .infinity, alignment: .leading)
-          .contentShape(.rect)
+          .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .padding(.vertical, 8)
@@ -107,7 +110,7 @@ struct MenuBarContent: View {
         .padding(.vertical, 8)
       }
       .padding(.horizontal, 12)
-      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+      .compatGlass(.regular, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
   }
 

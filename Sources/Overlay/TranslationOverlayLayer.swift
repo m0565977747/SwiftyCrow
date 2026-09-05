@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import Accessibility
+import Combine
 import SwiftUI
 
 // MARK: - TranslationOverlayLayer
@@ -21,7 +22,7 @@ struct TranslationOverlayLayer: View {
     self.lines = lines
     followsSystemHorizontalTextPreference = preferenceOverride == nil
     _prefersHorizontalTextLayout = State(
-      initialValue: preferenceOverride ?? AccessibilitySettings.prefersHorizontalTextLayout
+      initialValue: preferenceOverride ?? Self.systemPrefersHorizontalTextLayout
     )
   }
 
@@ -37,17 +38,33 @@ struct TranslationOverlayLayer: View {
         prefersHorizontalTextLayout: prefersHorizontalTextLayout
       )
     }
-    .onReceive(
-      NotificationCenter.default.publisher(
-        for: AccessibilitySettings.prefersHorizontalTextLayoutDidChangeNotification
-      )
-    ) { _ in
+    .onReceive(Self.systemHorizontalTextLayoutChanges) { _ in
       guard followsSystemHorizontalTextPreference else { return }
-      prefersHorizontalTextLayout = AccessibilitySettings.prefersHorizontalTextLayout
+      prefersHorizontalTextLayout = Self.systemPrefersHorizontalTextLayout
     }
   }
 
   // MARK: Private
+
+  /// The "Prefer Horizontal Text" accessibility setting is macOS 15+; earlier
+  /// systems have no such preference, so vertical scripts keep their flow.
+  private static var systemPrefersHorizontalTextLayout: Bool {
+    if #available(macOS 15.0, *) {
+      return AccessibilitySettings.prefersHorizontalTextLayout
+    }
+    return false
+  }
+
+  /// Fires when the setting above changes; never fires before macOS 15.
+  private static var systemHorizontalTextLayoutChanges: AnyPublisher<Void, Never> {
+    if #available(macOS 15.0, *) {
+      return NotificationCenter.default
+        .publisher(for: AccessibilitySettings.prefersHorizontalTextLayoutDidChangeNotification)
+        .map { _ in () }
+        .eraseToAnyPublisher()
+    }
+    return Empty<Void, Never>().eraseToAnyPublisher()
+  }
 
   @State private var prefersHorizontalTextLayout: Bool
 
@@ -139,7 +156,7 @@ private struct SourceReplacementSurface: View, Equatable {
         height: clippingFrame.height,
         alignment: .topLeading
       )
-      .clipShape(.rect(
+      .clipShape(RoundedRectangle(
         cornerRadius: min(clippingFrame.width, clippingFrame.height) * cornerRadiusFraction,
         style: .continuous
       ))

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2021-2026 PangMo5 and contributors
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import Combine
 import ComposableArchitecture
 import Sharing
 
@@ -64,10 +65,16 @@ struct AppFeature {
             }
           },
           .run { [updater, settings = state.$settings] _ in
-            for await config in Observations({
-              (settings.wrappedValue.updates.automaticChecks, settings.wrappedValue.updates.checkInterval)
-            }) {
-              updater.configure(automaticallyChecks: config.0, interval: config.1.seconds)
+            // `Observations` (macOS 26) yielded the current value and then every
+            // change. swift-sharing's `publisher` only emits changes, so apply
+            // the current value first; `removeDuplicates` keeps the
+            // "only when these fields change" behaviour.
+            let configure = { (updates: UpdateSettings) in
+              updater.configure(automaticallyChecks: updates.automaticChecks, interval: updates.checkInterval.seconds)
+            }
+            configure(settings.wrappedValue.updates)
+            for await updates in settings.publisher.map(\.updates).removeDuplicates().values {
+              configure(updates)
             }
           },
           .run { [overlay] send in
@@ -84,10 +91,14 @@ struct AppFeature {
           .run { [globalShortcuts, settings = state.$settings] _ in
             // config.toml is the source of truth for hotkeys; push it into the
             // registrar on launch and whenever it changes (incl. hand edits).
-            for await shortcuts in Observations({ settings.wrappedValue.shortcuts }) {
+            let register = { (shortcuts: ShortcutSettings) in
               for (event, keyPath) in ShortcutEvent.globalKeyPaths {
                 globalShortcuts.setShortcut(event, shortcuts[keyPath: keyPath])
               }
+            }
+            register(settings.wrappedValue.shortcuts)
+            for await shortcuts in settings.publisher.map(\.shortcuts).removeDuplicates().values {
+              register(shortcuts)
             }
           },
           .run { [updater] send in

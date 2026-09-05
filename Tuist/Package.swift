@@ -21,6 +21,9 @@ let package = Package(
   dependencies: [
     .package(url: "https://github.com/pointfreeco/swift-composable-architecture", from: "1.25.5"),
     .package(url: "https://github.com/pointfreeco/swift-sharing", from: "2.7.4"),
+    // Already resolved transitively via TCA (pinned in Package.resolved); listed
+    // directly so the app target can depend on the `Perception` product.
+    .package(url: "https://github.com/pointfreeco/swift-perception", from: "2.0.10"),
     .package(url: "https://github.com/Clipy/Magnet", from: "3.5.0"),
     .package(url: "https://github.com/mattt/swift-toml", from: "2.0.0"),
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.2"),

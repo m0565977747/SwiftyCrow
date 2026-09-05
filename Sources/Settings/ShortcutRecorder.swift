@@ -32,7 +32,7 @@ struct ShortcutRecorder: View {
         onChange: onChange,
         onRecordingChange: { recording in shortcuts.setEnabled(!recording) }
       )
-      .glassEffect(.regular, in: Capsule())
+      .compatGlass(.regular, in: Capsule())
       .frame(width: 150, height: 24)
 
       Button {

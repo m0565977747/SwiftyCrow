@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import AppKit
+import Perception
 import Sharing
 import SwiftUI
 
@@ -102,7 +103,7 @@ final class OverlayWindowController: NSObject, NSWindowDelegate {
   private var lastState: OverlayRenderState?
   private var eventHandler: (@Sendable (OverlayUserAction) -> Void)?
 
-  /// Writes only what changed. `@Observable` notifies on every assignment, equal
+  /// Writes only what changed. `@Perceptible` notifies on every assignment, equal
   /// value or not, so blindly re-assigning `lines` or the backdrop on each
   /// render invalidated the whole overlay view tree at the live capture rate.
   private func assign(_ state: OverlayRenderState) {
@@ -362,7 +363,10 @@ final class OverlayWindowController: NSObject, NSWindowDelegate {
 
 // MARK: - OverlayWindowModel
 
-@Observable
+/// `@Perceptible` (swift-perception) rather than `@Observable`: it is the same
+/// macro-generated observation on macOS 14+, and back-deploys to macOS 13 where
+/// SwiftUI views read it through `WithPerceptionTracking`.
+@Perceptible
 final class OverlayWindowModel {
   var lines = [OverlayLine]()
   var hideOnHover = false
@@ -396,34 +400,36 @@ private struct OverlayRootView: View {
   let onCopy: () -> Void
 
   var body: some View {
-    OverlayView(
-      lines: model.isInteracting ? [] : model.lines,
-      isTranslating: model.isTranslating,
-      isLive: model.isLive,
-      translationUnavailable: model.translationUnavailable,
-      isPreparingRecognition: model.isPreparingRecognition,
-      frameOnly: model.isWindowFrame,
-      showMoveHandle: model.cursorInside,
-      onToggleLive: onToggleLive,
-      onClose: onClose
-    )
-    .background {
-      // Hidden affordances: ⌘, opens Settings, ⌘C copies the translated text.
-      // This view is a detached AppKit hosting view with no scene environment,
-      // so it can't call `openWindow`; posting the notification lets the always-
-      // mounted menu-bar label open the settings window on its behalf.
-      Group {
-        Button("Open Settings") {
-          NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
+    WithPerceptionTracking {
+      OverlayView(
+        lines: model.isInteracting ? [] : model.lines,
+        isTranslating: model.isTranslating,
+        isLive: model.isLive,
+        translationUnavailable: model.translationUnavailable,
+        isPreparingRecognition: model.isPreparingRecognition,
+        frameOnly: model.isWindowFrame,
+        showMoveHandle: model.cursorInside,
+        onToggleLive: onToggleLive,
+        onClose: onClose
+      )
+      .background {
+        // Hidden affordances: ⌘, opens Settings, ⌘C copies the translated text.
+        // This view is a detached AppKit hosting view with no scene environment,
+        // so it can't call `openWindow`; posting the notification lets the always-
+        // mounted menu-bar label open the settings window on its behalf.
+        Group {
+          Button("Open Settings") {
+            NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
+          }
+          .keyboardShortcut(",", modifiers: .command)
+          Button("Copy translation") { onCopy() }
+            .keyboardShortcut("c", modifiers: .command)
+            .disabled(model.lines.isEmpty)
         }
-        .keyboardShortcut(",", modifiers: .command)
-        Button("Copy translation") { onCopy() }
-          .keyboardShortcut("c", modifiers: .command)
-          .disabled(model.lines.isEmpty)
+        .frame(width: 0, height: 0)
+        .opacity(0)
+        .accessibilityHidden(true)
       }
-      .frame(width: 0, height: 0)
-      .opacity(0)
-      .accessibilityHidden(true)
     }
   }
 
@@ -441,20 +447,22 @@ private struct LiveResultView: View {
   let model: OverlayWindowModel
 
   var body: some View {
-    content
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .overlay(alignment: .bottom) {
-        if model.translationUnavailable {
-          TranslationModelHint()
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .padding(8)
-            .transition(.opacity)
+    WithPerceptionTracking {
+      content
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+          if model.translationUnavailable {
+            TranslationModelHint()
+              .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+              .padding(8)
+              .transition(.opacity)
+          }
         }
-      }
-      .animation(.easeOut(duration: 0.15), value: model.translationUnavailable)
-      .padding(10)
-      .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-      .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .animation(.easeOut(duration: 0.15), value: model.translationUnavailable)
+        .padding(10)
+        .compatGlass(.regular, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
   }
 
   // MARK: Private

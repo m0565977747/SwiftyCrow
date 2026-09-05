@@ -3,6 +3,7 @@
 
 import AppKit
 import ComposableArchitecture
+import Perception
 import Sharing
 import SwiftUI
 
@@ -99,16 +100,18 @@ private struct GeneralSection: View {
   let store: StoreOf<SettingsFeature>
 
   var body: some View {
-    Section {
-      Toggle(isOn: Binding(
-        get: { store.launchAtLogin },
-        set: { store.send(.launchAtLoginChanged($0)) }
-      )) {
-        Text("Launch at login")
-        Text("Start SwiftyCrow automatically when you log in.")
+    WithPerceptionTracking {
+      Section {
+        Toggle(isOn: Binding(
+          get: { store.launchAtLogin },
+          set: { store.send(.launchAtLoginChanged($0)) }
+        )) {
+          Text("Launch at login")
+          Text("Start SwiftyCrow automatically when you log in.")
+        }
+      } header: {
+        Text("General")
       }
-    } header: {
-      Text("General")
     }
   }
 }
@@ -122,23 +125,25 @@ private struct LanguagesSection: View {
   let store: StoreOf<SettingsFeature>
 
   var body: some View {
-    Section {
-      Picker("Source", selection: Binding($settings.languages.source)) {
-        ForEach(store.sourceLanguages) { language in
-          Text(language.displayName).tag(language)
+    WithPerceptionTracking {
+      Section {
+        Picker("Source", selection: Binding($settings.languages.source)) {
+          ForEach(store.sourceLanguages) { language in
+            Text(language.displayName).tag(language)
+          }
         }
-      }
-      Picker("Target", selection: Binding($settings.languages.target)) {
-        ForEach(store.targetLanguages) { language in
-          Text(language.displayName).tag(language)
+        Picker("Target", selection: Binding($settings.languages.target)) {
+          ForEach(store.targetLanguages) { language in
+            Text(language.displayName).tag(language)
+          }
         }
+      } header: {
+        Text("Languages")
+      } footer: {
+        Text("List is loaded from Apple Translation \u{00B7} Vision on this device.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
-    } header: {
-      Text("Languages")
-    } footer: {
-      Text("List is loaded from Apple Translation \u{00B7} Vision on this device.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
   }
 
@@ -155,23 +160,25 @@ private struct LiveCaptureSection: View {
   // MARK: Internal
 
   var body: some View {
-    Section {
-      LabeledContent("Capture interval") {
-        VStack(alignment: .trailing, spacing: 2) {
-          Slider(value: Binding($settings.capture.interval), in: 0.3...3.0, step: 0.1)
-            .frame(width: 220)
-          Text(String(format: "%.1f s", settings.capture.interval))
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
+    WithPerceptionTracking {
+      Section {
+        LabeledContent("Capture interval") {
+          VStack(alignment: .trailing, spacing: 2) {
+            Slider(value: Binding($settings.capture.interval), in: 0.3...3.0, step: 0.1)
+              .frame(width: 220)
+            Text(String(format: "%.1f s", settings.capture.interval))
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .monospacedDigit()
+          }
         }
+      } header: {
+        Text("Live Capture")
+      } footer: {
+        Text("How often Live Mode re-captures the overlay region.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
-    } header: {
-      Text("Live Capture")
-    } footer: {
-      Text("How often Live Mode re-captures the overlay region.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
   }
 
@@ -187,21 +194,23 @@ private struct TranslationSection: View {
   let store: StoreOf<SettingsFeature>
 
   var body: some View {
-    TranslationProviderSection(store: store)
+    WithPerceptionTracking {
+      TranslationProviderSection(store: store)
 
-    Section {
-      Picker("Strategy", selection: Binding($settings.translation.strategy)) {
-        ForEach(TranslationStrategy.allCases) { strategy in
-          Text(strategy.displayName).tag(strategy)
+      Section {
+        Picker("Strategy", selection: Binding($settings.translation.strategy)) {
+          ForEach(TranslationStrategy.allCases) { strategy in
+            Text(strategy.displayName).tag(strategy)
+          }
         }
+        .disabled(TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) != .apple)
+      } header: {
+        Text("Translation")
+      } footer: {
+        Text("High fidelity uses Apple Intelligence on devices that support it (macOS 26.4+). Applies to Apple Translation only.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
-      .disabled(TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) != .apple)
-    } header: {
-      Text("Translation")
-    } footer: {
-      Text("High fidelity uses Apple Intelligence on devices that support it (macOS 26.4+). Applies to Apple Translation only.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
   }
 
@@ -220,6 +229,7 @@ private struct TranslationProviderSection: View {
   let store: StoreOf<SettingsFeature>
 
   var body: some View {
+    WithPerceptionTracking {
     Section {
       Picker("Provider", selection: Binding(
         get: { TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) },
@@ -265,6 +275,7 @@ private struct TranslationProviderSection: View {
       .font(.caption)
       .foregroundStyle(.secondary)
     }
+    }
   }
 
   // MARK: Private
@@ -280,21 +291,23 @@ private struct OverlaySection: View {
   // MARK: Internal
 
   var body: some View {
-    Section {
-      Toggle("Hide on hover", isOn: Binding($settings.overlay.hideOnHover))
-      Picker("Live mode", selection: Binding($settings.overlay.liveMode)) {
-        ForEach(OverlayLiveMode.allCases) { mode in
-          Text(mode.displayName).tag(mode)
+    WithPerceptionTracking {
+      Section {
+        Toggle("Hide on hover", isOn: Binding($settings.overlay.hideOnHover))
+        Picker("Live mode", selection: Binding($settings.overlay.liveMode)) {
+          ForEach(OverlayLiveMode.allCases) { mode in
+            Text(mode.displayName).tag(mode)
+          }
         }
+      } header: {
+        Text("Overlay")
+      } footer: {
+        Text(
+          "Start a live overlay from the menu bar or the Live overlay shortcut, then drag to select a region (press Space to pick a window). In-place draws the translation over the text; Window keeps the overlay a thin region frame and shows the translation in a separate window. The overlay always lets clicks pass through to the apps below."
+        )
+        .font(.caption)
+        .foregroundStyle(.secondary)
       }
-    } header: {
-      Text("Overlay")
-    } footer: {
-      Text(
-        "Start a live overlay from the menu bar or the Live overlay shortcut, then drag to select a region (press Space to pick a window). In-place draws the translation over the text; Window keeps the overlay a thin region frame and shows the translation in a separate window. The overlay always lets clicks pass through to the apps below."
-      )
-      .font(.caption)
-      .foregroundStyle(.secondary)
     }
   }
 
@@ -311,31 +324,33 @@ private struct ShortcutsSection: View {
   // MARK: Internal
 
   var body: some View {
-    Section {
-      recorder("Capture region", \.selectRegion)
-      recorder("Live overlay (select a region)", \.liveOverlay)
-      recorder("Show / hide overlay (last region)", \.toggleLiveOverlay)
-      recorder("Pause / resume Live", \.toggleLive)
-      recorder("Switch display (In-place / Window)", \.toggleLiveMode)
-    } header: {
-      Text("Global Shortcuts")
-    } footer: {
-      Text("These hotkeys work even when the app is in the background, and are saved to config.toml.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    }
+    WithPerceptionTracking {
+      Section {
+        recorder("Capture region", \.selectRegion)
+        recorder("Live overlay (select a region)", \.liveOverlay)
+        recorder("Show / hide overlay (last region)", \.toggleLiveOverlay)
+        recorder("Pause / resume Live", \.toggleLive)
+        recorder("Switch display (In-place / Window)", \.toggleLiveMode)
+      } header: {
+        Text("Global Shortcuts")
+      } footer: {
+        Text("These hotkeys work even when the app is in the background, and are saved to config.toml.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
 
-    Section {
-      recorder("Save image", \.regionSave)
-      recorder("Copy image", \.regionCopyImage)
-      recorder("Copy original text", \.regionCopyOriginal)
-      recorder("Copy translation", \.regionCopyTranslation)
-    } header: {
-      Text("Capture Window")
-    } footer: {
-      Text("Active only while a capture result window is focused.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
+      Section {
+        recorder("Save image", \.regionSave)
+        recorder("Copy image", \.regionCopyImage)
+        recorder("Copy original text", \.regionCopyOriginal)
+        recorder("Copy translation", \.regionCopyTranslation)
+      } header: {
+        Text("Capture Window")
+      } footer: {
+        Text("Active only while a capture result window is focused.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
     }
   }
 
@@ -386,24 +401,26 @@ private struct UpdatesSection: View {
   let store: StoreOf<SettingsFeature>
 
   var body: some View {
-    Section {
-      Toggle("Automatically check for updates", isOn: Binding($settings.updates.automaticChecks))
-      Picker("Check", selection: Binding($settings.updates.checkInterval)) {
-        ForEach(UpdateCheckInterval.allCases) { interval in
-          Text(interval.displayName).tag(interval)
+    WithPerceptionTracking {
+      Section {
+        Toggle("Automatically check for updates", isOn: Binding($settings.updates.automaticChecks))
+        Picker("Check", selection: Binding($settings.updates.checkInterval)) {
+          ForEach(UpdateCheckInterval.allCases) { interval in
+            Text(interval.displayName).tag(interval)
+          }
         }
+        .disabled(!settings.updates.automaticChecks)
+        Button("Check for Updates Now") {
+          store.send(.checkForUpdatesTapped)
+        }
+        .disabled(!store.canCheckForUpdates)
+      } header: {
+        Text("Software Update")
+      } footer: {
+        Text("SwiftyCrow checks in the background and notifies you when a new version is available.")
+          .font(.caption)
+          .foregroundStyle(.secondary)
       }
-      .disabled(!settings.updates.automaticChecks)
-      Button("Check for Updates Now") {
-        store.send(.checkForUpdatesTapped)
-      }
-      .disabled(!store.canCheckForUpdates)
-    } header: {
-      Text("Software Update")
-    } footer: {
-      Text("SwiftyCrow checks in the background and notifies you when a new version is available.")
-        .font(.caption)
-        .foregroundStyle(.secondary)
     }
   }
 
@@ -568,11 +585,26 @@ private struct LegalDocumentView: View {
               .padding()
           }
         } else if let loadErrorMessage {
-          ContentUnavailableView(
-            "Unable to Open Document",
-            systemImage: "doc.badge.exclamationmark",
-            description: Text(loadErrorMessage)
-          )
+          if #available(macOS 14.0, *) {
+            ContentUnavailableView(
+              "Unable to Open Document",
+              systemImage: "doc.badge.exclamationmark",
+              description: Text(loadErrorMessage)
+            )
+          } else {
+            VStack(spacing: 8) {
+              Image(systemName: "doc.badge.exclamationmark")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+              Text("Unable to Open Document")
+                .font(.headline)
+              Text(loadErrorMessage)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            }
+            .padding()
+          }
         } else {
           ProgressView("Loading document…")
         }

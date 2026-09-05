@@ -468,10 +468,10 @@ enum OverlaySourceAppearanceAnalyzer {
       var runs = [Range<Int>]()
       var runStart: Int?
       for y in range {
-        let inkCount = (minimumX ..< maximumX).count { x in
+        let inkCount = (minimumX ..< maximumX).filter { x in
           guard let color = raster.color(at: y * raster.width + x) else { return false }
           return color.distance(to: patch.appearance.background) >= inkThreshold
-        }
+        }.count
         if inkCount >= minimumInkPerRow {
           runStart = runStart ?? y
         } else if let start = runStart {
