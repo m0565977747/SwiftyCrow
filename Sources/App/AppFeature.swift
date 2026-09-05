@@ -66,15 +66,11 @@ struct AppFeature {
           },
           .run { [updater, settings = state.$settings] _ in
             // `Observations` (macOS 26) yielded the current value and then every
-            // change. swift-sharing's `publisher` only emits changes, so apply
-            // the current value first; `removeDuplicates` keeps the
-            // "only when these fields change" behaviour.
-            let configure = { (updates: UpdateSettings) in
-              updater.configure(automaticallyChecks: updates.automaticChecks, interval: updates.checkInterval.seconds)
-            }
-            configure(settings.wrappedValue.updates)
+            // change. swift-sharing's `publisher` does the same (it prepends the
+            // current value); `removeDuplicates` keeps the "only when these
+            // fields change" behaviour.
             for await updates in settings.publisher.map(\.updates).removeDuplicates().values {
-              configure(updates)
+              updater.configure(automaticallyChecks: updates.automaticChecks, interval: updates.checkInterval.seconds)
             }
           },
           .run { [overlay] send in
@@ -91,14 +87,11 @@ struct AppFeature {
           .run { [globalShortcuts, settings = state.$settings] _ in
             // config.toml is the source of truth for hotkeys; push it into the
             // registrar on launch and whenever it changes (incl. hand edits).
-            let register = { (shortcuts: ShortcutSettings) in
+            // `publisher` emits the current value first, then every change.
+            for await shortcuts in settings.publisher.map(\.shortcuts).removeDuplicates().values {
               for (event, keyPath) in ShortcutEvent.globalKeyPaths {
                 globalShortcuts.setShortcut(event, shortcuts[keyPath: keyPath])
               }
-            }
-            register(settings.wrappedValue.shortcuts)
-            for await shortcuts in settings.publisher.map(\.shortcuts).removeDuplicates().values {
-              register(shortcuts)
             }
           },
           .run { [updater] send in
