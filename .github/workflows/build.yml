@@ -11,7 +11,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # `write` so the job can publish each build (app zip + logs) as a
+  # pre-release; artifacts are download-restricted, release assets are not.
+  contents: write
 
 concurrency:
   group: build-${{ github.ref }}
@@ -154,3 +156,21 @@ jobs:
             SwiftyCrow-ventura.zip
             build.log
             test.log
+
+      - name: Publish build as pre-release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="ci-build-${{ github.run_number }}"
+          FILES=""
+          for f in SwiftyCrow-ventura.zip build.log test.log; do
+            [ -f "$f" ] && FILES="$FILES $f"
+          done
+          STATUS="${{ job.status }}"
+          gh release create "$TAG" $FILES \
+            --prerelease \
+            --target "${{ github.sha }}" \
+            --title "CI build ${{ github.run_number }} (${STATUS})" \
+            --notes "Automated Ventura backport build of ${{ github.sha }} — job status: ${STATUS}. Not a supported release."
