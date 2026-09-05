@@ -31,7 +31,7 @@ struct SettingsView: View {
         case .general: GeneralSection(store: store)
         case .languages: LanguagesSection(store: store)
         case .capture: LiveCaptureSection()
-        case .translation: TranslationSection()
+        case .translation: TranslationSection(store: store)
         case .overlay: OverlaySection()
         case .shortcuts: ShortcutsSection()
         case .updates: UpdatesSection(store: store)
@@ -184,21 +184,90 @@ private struct LiveCaptureSection: View {
 // MARK: - TranslationSection
 
 private struct TranslationSection: View {
+  let store: StoreOf<SettingsFeature>
+
   var body: some View {
+    TranslationProviderSection(store: store)
+
     Section {
       Picker("Strategy", selection: Binding($settings.translation.strategy)) {
         ForEach(TranslationStrategy.allCases) { strategy in
           Text(strategy.displayName).tag(strategy)
         }
       }
+      .disabled(TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) != .apple)
     } header: {
       Text("Translation")
     } footer: {
-      Text("High fidelity uses Apple Intelligence on devices that support it (macOS 26.4+).")
+      Text("High fidelity uses Apple Intelligence on devices that support it (macOS 26.4+). Applies to Apple Translation only.")
         .font(.caption)
         .foregroundStyle(.secondary)
     }
   }
+
+  @Shared(.settings) private var settings
+
+}
+
+// MARK: - TranslationProviderSection
+
+/// Backend picker plus the Google Cloud Translation API key. The key field is
+/// a draft: it is written to the Keychain on Save and never shown back.
+private struct TranslationProviderSection: View {
+
+  // MARK: Internal
+
+  let store: StoreOf<SettingsFeature>
+
+  var body: some View {
+    Section {
+      Picker("Provider", selection: Binding(
+        get: { TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) },
+        set: { store.send(.translationProviderChanged($0)) }
+      )) {
+        ForEach(TranslationProviderID.availableCases) { provider in
+          Text(provider.displayName).tag(provider)
+        }
+      }
+      LabeledContent("Google API key") {
+        HStack(spacing: 8) {
+          SecureField(
+            store.hasGoogleAPIKey ? "Saved in Keychain — enter a new key to replace" : "Paste your Cloud Translation API key",
+            text: Binding(
+              get: { store.googleAPIKeyDraft },
+              set: { store.send(.googleAPIKeyChanged($0)) }
+            )
+          )
+          .textFieldStyle(.roundedBorder)
+          .frame(minWidth: 220)
+          .onSubmit { store.send(.saveGoogleAPIKey) }
+          Button("Save") { store.send(.saveGoogleAPIKey) }
+            .disabled(store.googleAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          if store.hasGoogleAPIKey {
+            Button("Remove") { store.send(.removeGoogleAPIKey) }
+          }
+        }
+      }
+      if let error = store.googleAPIKeyError {
+        Text(error)
+          .font(.caption)
+          .foregroundStyle(.red)
+      }
+    } header: {
+      Text("Provider")
+    } footer: {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(store.hasGoogleAPIKey ? "A Google API key is stored in your Keychain." : "No Google API key stored.")
+        Text(
+          "Get a key at console.cloud.google.com → APIs & Services → Credentials; enable Cloud Translation API. Apple Translation requires macOS 26."
+        )
+      }
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    }
+  }
+
+  // MARK: Private
 
   @Shared(.settings) private var settings
 

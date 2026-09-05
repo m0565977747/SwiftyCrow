@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import Foundation
-import Translation
 import Vision
 
 // MARK: - Language
@@ -61,19 +60,39 @@ extension Language {
     return Language(code: preferred)
   }
 
-  /// Languages reported by Apple Translation as supported on this device.
-  /// When `intersectedWithOCR` is true, narrows the list to ones Vision can
-  /// also OCR — appropriate for source pickers.
+  /// Languages the current translation provider (Apple Translation on macOS
+  /// 26, Google Cloud Translation otherwise) reports as supported. When
+  /// `intersectedWithOCR` is true, narrows the list to ones Vision can also
+  /// OCR — appropriate for source pickers.
   static func systemSupported(intersectedWithOCR: Bool) async -> [Language] {
-    let translationLangs = await LanguageAvailability().supportedLanguages
-    var ids = Set(translationLangs.map(\.maximalIdentifier))
-    if intersectedWithOCR {
-      let request = RecognizeTextRequest()
-      ids.formIntersection(request.supportedRecognitionLanguages.map(\.maximalIdentifier))
+    let provider = TranslationProviderSelection.current()
+    let translationLangs = (try? await provider.supportedLanguages()) ?? []
+    return supported(
+      translation: translationLangs,
+      ocr: intersectedWithOCR ? ocrRecognitionLanguages() : nil
+    )
+  }
+
+  /// Pure part of `systemSupported`, kept separate so it can be tested
+  /// without a provider. `ocr == nil` skips the intersection.
+  static func supported(translation: [Locale.Language], ocr: [Locale.Language]?) -> [Language] {
+    var ids = Set(translation.map(\.maximalIdentifier))
+    if let ocr {
+      ids.formIntersection(ocr.map(\.maximalIdentifier))
     }
     return ids
       .filter { !$0.isEmpty }
       .map { Language(code: $0) }
       .sorted { $0.displayName.localizedCompare($1.displayName) == .orderedAscending }
+  }
+
+  /// Languages Vision can recognize with the accurate level. The class-based
+  /// `VNRecognizeTextRequest` query exists on every supported macOS release,
+  /// unlike the Swift-only `RecognizeTextRequest` (macOS 15).
+  static func ocrRecognitionLanguages() -> [Locale.Language] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    let identifiers = (try? request.supportedRecognitionLanguages()) ?? []
+    return identifiers.map { Locale.Language(identifier: $0) }
   }
 }

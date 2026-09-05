@@ -4,7 +4,7 @@
 import ComposableArchitecture
 import DependenciesMacros
 import Foundation
-import Translation
+import Sharing
 
 // MARK: - TranslationLine
 
@@ -92,6 +92,31 @@ enum TranslationTextStructure {
   }
 }
 
+// MARK: - TranslationProviderSelection
+
+/// Picks the backend for the current settings and system. Apple Translation
+/// needs macOS 26; anything else — or an explicit choice — is Google.
+enum TranslationProviderSelection {
+  static func resolvedID(preferred: TranslationProviderID) -> TranslationProviderID {
+    if #available(macOS 26.0, *), preferred == .apple {
+      return .apple
+    }
+    return .google
+  }
+
+  /// The provider to use right now, built from the shared settings and the
+  /// stored credential. Cheap to call per batch; sessions are opened per call.
+  static func current() -> any TranslationProvider {
+    @Shared(.settings) var settings
+    @Dependency(\.translationCredential) var translationCredential
+    let id = resolvedID(preferred: settings.translation.provider)
+    if #available(macOS 26.0, *), id == .apple {
+      return AppleTranslationProvider()
+    }
+    return GoogleCloudTranslationProvider(apiKey: translationCredential.apiKey(.google))
+  }
+}
+
 // MARK: - TranslationClient
 
 @DependencyClient
@@ -119,16 +144,11 @@ extension TranslationClient: DependencyKey {
   static let liveValue = TranslationClient(
     translateBatch: { lines, source, target, strategy in
       AsyncThrowingStream { continuation in
+        let provider = TranslationProviderSelection.current()
         let pair = "\(source.maximalIdentifier)->\(target.maximalIdentifier)"
-        let session =
-          if #available(macOS 26.4, *) {
-            TranslationSession(installedSource: source, target: target, preferredStrategy: strategy.sessionStrategy)
-          } else {
-            TranslationSession(installedSource: source, target: target)
-          }
         let linesByID = Dictionary(uniqueKeysWithValues: lines.map { ($0.id, $0) })
         let requests = lines.map {
-          TranslationSession.Request(sourceText: $0.requestText, clientIdentifier: $0.id.uuidString)
+          TranslationRequest(sourceText: $0.requestText, clientIdentifier: $0.id.uuidString)
         }
         let task = Task {
           let clock = ContinuousClock()
@@ -136,16 +156,16 @@ extension TranslationClient: DependencyKey {
           var receivedFirstResponse = false
           do {
             var styledTargets = [UUID: String]()
-            for try await response in session.translate(batch: requests) {
+            for try await response in provider.translate(requests, source: source, target: target, strategy: strategy) {
               if !receivedFirstResponse {
                 receivedFirstResponse = true
                 let elapsed = clock.now - started
                 Log.translation.debug(
-                  "First response for \(pair, privacy: .public) arrived in \(elapsed.loggedSeconds, privacy: .public)s"
+                  "First response for \(pair, privacy: .public) via \(provider.id.rawValue, privacy: .public) arrived in \(elapsed.loggedSeconds, privacy: .public)s"
                 )
               }
               guard
-                let id = response.clientIdentifier.flatMap(UUID.init(uuidString:)),
+                let id = UUID(uuidString: response.clientIdentifier),
                 let sourceLine = linesByID[id]
               else { continue }
               let translatedLabel = sourceLine.trailingContext == nil
@@ -156,7 +176,7 @@ extension TranslationClient: DependencyKey {
                 translatedLabel,
                 source: sourceLine.text
               )
-              if #available(macOS 26.4, *), sourceLine.attributedText != nil {
+              if provider.supportsStyledTranslation, sourceLine.attributedText != nil {
                 styledTargets[id] = targetText
                 continue
               }
@@ -165,11 +185,14 @@ extension TranslationClient: DependencyKey {
                 text: targetText
               ))
             }
-            if #available(macOS 26.4, *), !styledTargets.isEmpty {
+            if !styledTargets.isEmpty {
               try await Self.yieldStyledTranslations(
                 styledTargets,
                 linesByID: linesByID,
-                session: session,
+                provider: provider,
+                source: source,
+                target: target,
+                strategy: strategy,
                 continuation: continuation
               )
             }
@@ -197,12 +220,9 @@ extension TranslationClient: DependencyKey {
         }
         continuation.onTermination = { _ in
           watchdog.cancel()
-          // `task.cancel()` alone doesn't stop work already handed to the
-          // translation daemon — `cancel()` is the documented way to stop a
-          // session's ongoing work. Without it, every live tick whose batch
-          // outruns the capture interval abandons a session that keeps working
-          // daemon-side, and they accumulate for the life of the process.
-          session.cancel()
+          // Cancelling the task ends the provider's stream, whose own
+          // termination handler stops the backend work (for Apple, the
+          // session's daemon-side batch).
           task.cancel()
         }
       }
@@ -211,16 +231,18 @@ extension TranslationClient: DependencyKey {
 
   // MARK: Private
 
-  @available(macOS 26.4, *)
   private static func yieldStyledTranslations(
     _ targets: [UUID: String],
     linesByID: [UUID: TranslationLine],
-    session: TranslationSession,
+    provider: any TranslationProvider,
+    source: Locale.Language,
+    target: Locale.Language,
+    strategy: TranslationStrategy,
     continuation: AsyncThrowingStream<TranslationLine, any Error>.Continuation
   ) async throws {
     var alternatives = [UUID: [URL: String]]()
     var snippetOwners = [UUID: (lineID: UUID, link: URL)]()
-    var snippetRequests = [TranslationSession.Request]()
+    var snippetRequests = [TranslationRequest]()
 
     for (lineID, targetText) in targets {
       guard let source = linesByID[lineID]?.attributedText else { continue }
@@ -228,7 +250,7 @@ extension TranslationClient: DependencyKey {
       for span in alignment.unmatched {
         let requestID = UUID()
         snippetOwners[requestID] = (lineID, span.link)
-        snippetRequests.append(TranslationSession.Request(
+        snippetRequests.append(TranslationRequest(
           sourceText: span.text,
           clientIdentifier: requestID.uuidString
         ))
@@ -236,9 +258,9 @@ extension TranslationClient: DependencyKey {
     }
 
     if !snippetRequests.isEmpty {
-      for try await response in session.translate(batch: snippetRequests) {
+      for try await response in provider.translate(snippetRequests, source: source, target: target, strategy: strategy) {
         guard
-          let requestID = response.clientIdentifier.flatMap(UUID.init(uuidString:)),
+          let requestID = UUID(uuidString: response.clientIdentifier),
           let owner = snippetOwners[requestID]
         else { continue }
         alternatives[owner.lineID, default: [:]][owner.link] = response.targetText
@@ -273,15 +295,5 @@ extension DependencyValues {
   var translation: TranslationClient {
     get { self[TranslationClient.self] }
     set { self[TranslationClient.self] = newValue }
-  }
-}
-
-@available(macOS 26.4, *)
-extension TranslationStrategy {
-  var sessionStrategy: TranslationSession.Strategy {
-    switch self {
-    case .lowLatency: .lowLatency
-    case .highFidelity: .highFidelity
-    }
   }
 }

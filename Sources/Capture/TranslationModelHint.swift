@@ -50,10 +50,13 @@ struct PreparingRecognitionNote: View {
 
 // MARK: - TranslationModelHint
 
-/// Shown when translation fails because the on-device model isn't installed.
-/// The Translation framework only translates languages downloaded in System
-/// Settings, so this explains the situation and links straight there — with a
-/// "Don't show again" that suppresses it for good once the user gets the point.
+/// Shown when translation fails because the backend can't serve the request.
+/// With Apple Translation that means the on-device model isn't installed —
+/// the framework only translates languages downloaded in System Settings, so
+/// this links straight there. With Google Cloud Translation (every macOS
+/// before 26) it means the API key is missing or rejected, so it opens the
+/// app's own Settings instead. A "Don't show again" suppresses it for good
+/// once the user gets the point.
 struct TranslationModelHint: View {
 
   // MARK: Internal
@@ -67,6 +70,23 @@ struct TranslationModelHint: View {
   // MARK: Private
 
   @Shared(.appStorage(translationModelHintDismissedKey)) private var dismissed = false
+  @Shared(.settings) private var settings
+
+  private var usesAppleTranslation: Bool {
+    TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) == .apple
+  }
+
+  private var title: String {
+    usesAppleTranslation
+      ? "Translation model not installed"
+      : "Google Cloud Translation API key missing or invalid"
+  }
+
+  private var detail: String {
+    usesAppleTranslation
+      ? "Add the language under System Settings → General → Language & Region → Translation Languages, then capture again."
+      : "Add a Cloud Translation API key under SwiftyCrow Settings → Translation, then capture again."
+  }
 
   private var content: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -74,10 +94,10 @@ struct TranslationModelHint: View {
         Image(systemName: "exclamationmark.triangle.fill")
           .foregroundStyle(.orange)
         VStack(alignment: .leading, spacing: 1) {
-          Text("Translation model not installed")
+          Text(title)
             .font(.caption)
             .fontWeight(.semibold)
-          Text("Add the language under System Settings → General → Language & Region → Translation Languages, then capture again.")
+          Text(detail)
             .font(.caption2)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
@@ -85,8 +105,17 @@ struct TranslationModelHint: View {
         Spacer(minLength: 8)
       }
       HStack(spacing: 14) {
-        Button("Open Settings", action: openLanguageSettings)
-          .controlSize(.small)
+        Button("Open Settings") {
+          if usesAppleTranslation {
+            openLanguageSettings()
+          } else {
+            // The hint can be hosted in a detached AppKit view with no scene
+            // environment, so it can't call `openWindow`; the always-mounted
+            // menu-bar label turns this into a scene-level open.
+            NotificationCenter.default.post(name: .openSettingsWindow, object: nil)
+          }
+        }
+        .controlSize(.small)
         Button("Don't show again") { $dismissed.withLock { $0 = true } }
           .buttonStyle(.plain)
           .font(.caption)

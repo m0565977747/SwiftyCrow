@@ -151,10 +151,54 @@ struct TranslationSettings: Codable, Equatable, Sendable {
   init(from decoder: any Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     let d = TranslationSettings()
+    provider = try c.decodeIfPresent(TranslationProviderID.self, forKey: .provider) ?? d.provider
     strategy = try c.decodeIfPresent(TranslationStrategy.self, forKey: .strategy) ?? d.strategy
   }
 
+  /// Which translation backend runs the batches. Apple Translation needs
+  /// macOS 26; older systems fall back to Google Cloud Translation, which
+  /// needs an API key stored in the Keychain (see `TranslationCredentialClient`).
+  var provider = TranslationProviderID.platformDefault
   var strategy = TranslationStrategy.lowLatency
+}
+
+// MARK: - TranslationProviderID
+
+enum TranslationProviderID: String, Codable, Equatable, Sendable, CaseIterable, Identifiable {
+  case apple
+  case google
+
+  // MARK: Internal
+
+  /// Apple Translation is only reachable through `TranslationSession` on
+  /// macOS 26+, so older systems default to Google.
+  static var platformDefault: TranslationProviderID {
+    if #available(macOS 26.0, *) {
+      return .apple
+    }
+    return .google
+  }
+
+  /// The providers this system can actually run — what the Settings picker
+  /// offers. A config written on macOS 26 that names `.apple` still parses on
+  /// older systems; `TranslationProviderSelection` resolves it to Google.
+  static var availableCases: [TranslationProviderID] {
+    if #available(macOS 26.0, *) {
+      return allCases
+    }
+    return [.google]
+  }
+
+  var id: String {
+    rawValue
+  }
+
+  var displayName: String {
+    switch self {
+    case .apple: "Apple Translation (on-device)"
+    case .google: "Google Cloud Translation"
+    }
+  }
 }
 
 // MARK: - UpdateSettings

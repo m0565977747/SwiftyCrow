@@ -6,8 +6,10 @@ import DependenciesMacros
 
 // MARK: - LanguageCatalogClient
 
-/// The translation/OCR languages installed on this device. Wrapping the
-/// Translation · Vision availability query keeps it controllable in reducers.
+/// The translation/OCR languages available on this device: what the selected
+/// translation provider (Apple Translation on macOS 26, Google Cloud
+/// Translation otherwise) supports, optionally narrowed to what Vision can
+/// recognize. Wrapping the query keeps it controllable in reducers.
 @DependencyClient
 struct LanguageCatalogClient {
   /// Supported languages. When `intersectedWithOCR` is true, narrows to ones
