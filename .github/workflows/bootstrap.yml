@@ -1,0 +1,4 @@
+name: Bootstrap ventura-backport
+on: {push: {branches: [bootstrap]}, workflow_dispatch: {}}
+permissions: {contents: write, actions: write}
+jobs: {apply: {runs-on: ubuntu-latest, steps: [{uses: actions/checkout@v4, with: {fetch-depth: 0}}, {name: Apply patch series onto upstream baseline, run: "set -euo pipefail && git config user.name Memo && git config user.email m0555944425@gmail.com && cp ventura-backport.patch /tmp/series.patch && BASE=1c4d1113dc091da8039303b200fe8bc9db5bcefb && (git fetch origin $BASE || git fetch https://github.com/PangMo5/SwiftyCrow.git $BASE) && git checkout -B ventura-backport $BASE && git am --committer-date-is-author-date /tmp/series.patch && git log --oneline $BASE..HEAD && git push -f origin ventura-backport"}, {name: Trigger build, env: {GH_TOKEN: "${{ github.token }}"}, run: "sleep 5 && gh workflow run build.yml --ref ventura-backport"}]}}
