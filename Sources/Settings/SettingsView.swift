@@ -230,51 +230,51 @@ private struct TranslationProviderSection: View {
 
   var body: some View {
     WithPerceptionTracking {
-    Section {
-      Picker("Provider", selection: Binding(
-        get: { TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) },
-        set: { store.send(.translationProviderChanged($0)) }
-      )) {
-        ForEach(TranslationProviderID.availableCases) { provider in
-          Text(provider.displayName).tag(provider)
-        }
-      }
-      LabeledContent("Google API key") {
-        HStack(spacing: 8) {
-          SecureField(
-            store.hasGoogleAPIKey ? "Saved in Keychain — enter a new key to replace" : "Paste your Cloud Translation API key",
-            text: Binding(
-              get: { store.googleAPIKeyDraft },
-              set: { store.send(.googleAPIKeyChanged($0)) }
-            )
-          )
-          .textFieldStyle(.roundedBorder)
-          .frame(minWidth: 220)
-          .onSubmit { store.send(.saveGoogleAPIKey) }
-          Button("Save") { store.send(.saveGoogleAPIKey) }
-            .disabled(store.googleAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-          if store.hasGoogleAPIKey {
-            Button("Remove") { store.send(.removeGoogleAPIKey) }
+      Section {
+        Picker("Provider", selection: Binding(
+          get: { TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) },
+          set: { store.send(.translationProviderChanged($0)) }
+        )) {
+          ForEach(TranslationProviderID.availableCases) { provider in
+            Text(provider.displayName).tag(provider)
           }
         }
+        LabeledContent("Google API key") {
+          HStack(spacing: 8) {
+            SecureField(
+              store.hasGoogleAPIKey ? "Saved in Keychain — enter a new key to replace" : "Paste your Cloud Translation API key",
+              text: Binding(
+                get: { store.googleAPIKeyDraft },
+                set: { store.send(.googleAPIKeyChanged($0)) }
+              )
+            )
+            .textFieldStyle(.roundedBorder)
+            .frame(minWidth: 220)
+            .onSubmit { store.send(.saveGoogleAPIKey) }
+            Button("Save") { store.send(.saveGoogleAPIKey) }
+              .disabled(store.googleAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            if store.hasGoogleAPIKey {
+              Button("Remove") { store.send(.removeGoogleAPIKey) }
+            }
+          }
+        }
+        if let error = store.googleAPIKeyError {
+          Text(error)
+            .font(.caption)
+            .foregroundStyle(.red)
+        }
+      } header: {
+        Text("Provider")
+      } footer: {
+        VStack(alignment: .leading, spacing: 4) {
+          Text(store.hasGoogleAPIKey ? "A Google API key is stored in your Keychain." : "No Google API key stored.")
+          Text(
+            "Get a key at console.cloud.google.com → APIs & Services → Credentials; enable Cloud Translation API. Apple Translation requires macOS 26."
+          )
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
       }
-      if let error = store.googleAPIKeyError {
-        Text(error)
-          .font(.caption)
-          .foregroundStyle(.red)
-      }
-    } header: {
-      Text("Provider")
-    } footer: {
-      VStack(alignment: .leading, spacing: 4) {
-        Text(store.hasGoogleAPIKey ? "A Google API key is stored in your Keychain." : "No Google API key stored.")
-        Text(
-          "Get a key at console.cloud.google.com → APIs & Services → Credentials; enable Cloud Translation API. Apple Translation requires macOS 26."
-        )
-      }
-      .font(.caption)
-      .foregroundStyle(.secondary)
-    }
     }
   }
 
