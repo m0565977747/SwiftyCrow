@@ -34,6 +34,7 @@ enum ScreenCaptureError: Error, LocalizedError, Equatable {
   case noDisplay
   case permissionRequired
   case windowUnavailable
+  case captureTimedOut
 
   var errorDescription: String? {
     switch self {
@@ -45,6 +46,8 @@ enum ScreenCaptureError: Error, LocalizedError, Equatable {
       "Screen Recording permission is required. Allow it in System Settings and restart the app."
     case .windowUnavailable:
       "That window is no longer available to capture."
+    case .captureTimedOut:
+      "Screen capture timed out waiting for a frame."
     }
   }
 }
@@ -103,10 +106,13 @@ extension ScreenCaptureClient: DependencyKey {
       configuration.pixelFormat = kCVPixelFormatType_32BGRA
       configuration.showsCursor = false
 
+      // `sourceRect` is in points of the display's own top-left coordinate
+      // space and `width`/`height` are in pixels — on every supported OS,
+      // including macOS 13, where the SCStream-based fallback runs.
       if
         let overlayFrame,
         let nsScreen,
-        let sourceRect = displayLocalRect(overlayFrame: overlayFrame, screen: nsScreen)
+        let sourceRect = displayLocalRect(overlayFrame: overlayFrame, screenFrame: nsScreen.frame)
       {
         configuration.sourceRect = sourceRect
         configuration.width = max(1, Int(sourceRect.width * scale))
@@ -116,7 +122,7 @@ extension ScreenCaptureClient: DependencyKey {
         configuration.height = Int(Double(display.height) * scale)
       }
 
-      return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+      return try await SingleFrameCapturer.captureImage(filter: filter, configuration: configuration)
     },
     captureWindow: { windowID in
       try await ScreenRecordingPermissionTracker.shared.requestIfNeeded()
@@ -144,9 +150,27 @@ extension ScreenCaptureClient: DependencyKey {
       configuration.height = max(1, Int(window.frame.height * scale))
 
       let filter = SCContentFilter(desktopIndependentWindow: window)
-      return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+      return try await SingleFrameCapturer.captureImage(filter: filter, configuration: configuration)
     }
   )
+}
+
+// MARK: - SingleFrameCapturer
+
+/// Routes a one-shot capture to `SCScreenshotManager` where it exists
+/// (macOS 14+) and to the `SCStream`-based `VenturaSingleFrameCapture` on
+/// macOS 13.
+private enum SingleFrameCapturer {
+  static func captureImage(
+    filter: SCContentFilter,
+    configuration: SCStreamConfiguration
+  ) async throws -> CGImage {
+    if #available(macOS 14.0, *) {
+      return try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+    } else {
+      return try await VenturaSingleFrameCapture.captureImage(filter: filter, configuration: configuration)
+    }
+  }
 }
 
 extension DependencyValues {
@@ -158,8 +182,10 @@ extension DependencyValues {
 
 /// Converts an AppKit-global rectangle (points, bottom-left origin) into
 /// a display-local rectangle in ScreenCaptureKit's top-left coordinate space.
-private func displayLocalRect(overlayFrame: CGRect, screen: NSScreen) -> CGRect? {
-  let screenFrame = screen.frame
+///
+/// `screenFrame` is the display's `NSScreen.frame`. Internal (not private) so
+/// the flip can be unit-tested without a real `NSScreen`.
+func displayLocalRect(overlayFrame: CGRect, screenFrame: CGRect) -> CGRect? {
   let intersection = overlayFrame.intersection(screenFrame)
   guard !intersection.isNull, !intersection.isEmpty else { return nil }
   return CGRect(
