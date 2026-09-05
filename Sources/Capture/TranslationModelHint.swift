@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import AppKit
+import Perception
 import Sharing
 import SwiftUI
 
@@ -62,8 +63,10 @@ struct TranslationModelHint: View {
   // MARK: Internal
 
   var body: some View {
-    if !dismissed {
-      content
+    WithPerceptionTracking {
+      if !dismissed {
+        content
+      }
     }
   }
 
