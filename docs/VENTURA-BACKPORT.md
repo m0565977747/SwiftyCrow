@@ -6,7 +6,6 @@ the deployment target to **macOS 13.0** and ships a **Universal 2** binary
 Sequoia. This document is the map of what had to change and where the
 compatibility code lives.
 
-> Status: skeleton — sections marked _TODO_ are filled in as the branch lands.
 
 ## Principles
 
@@ -23,9 +22,9 @@ compatibility code lives.
 | Folder | Purpose |
 | --- | --- |
 | `Sources/Compat/` | SwiftUI / AppKit shims for APIs newer than macOS 13 (`compatGlass`, `compatProminentButtonStyle`, `compatWindowDrag`). |
-| `Sources/Translation/` | _TODO_ — translation provider abstraction (Apple Translation is macOS 15+; earlier systems need an alternative provider). |
-| `Sources/OCR/` | _TODO_ — Vision `RecognizeDocumentsRequest` (macOS 26) vs. `VNRecognizeTextRequest` fallback. |
-| `Sources/Capture/` | Region / window capture. _TODO_ — `SCScreenshotManager` (macOS 14) vs. `SCStream` / `CGWindowListCreateImage` fallback. |
+| `Sources/Dependencies/Translation/` | `TranslationProvider` protocol + `AppleTranslationProvider` (macOS 26, original code) + `GoogleCloudTranslationProvider` (Cloud Translation v2 over `URLSession`) + `TranslationCredentialStore` (Keychain). `TranslationClient` keeps all shared post-processing and only picks the provider. |
+| `Sources/Dependencies/OCR/` | `ModernOCRPipeline` (macOS 26, `RecognizeDocumentsRequest`, original code) and `VenturaOCRPipeline` (`VNRecognizeTextRequest` revision 3 via `ClassicVisionTextRecognizer`), with `VenturaOCRLayout` synthesising paragraph groups / alignment / vertical-CJK geometrically. `VisionWarmUp` is shared. |
+| `Sources/Dependencies/Capture/` | `VenturaSingleFrameCapture`: one-shot `SCStream` that returns the first complete frame and stops, used where `SCScreenshotManager` (macOS 14) is unavailable. Filters, display selection, Retina scaling and own-window exclusion are unchanged. |
 
 ## Compatibility layer (`Sources/Compat/`)
 
@@ -44,8 +43,7 @@ compatibility code lives.
   for re-rendering on macOS 13, a no-op on 14+.
 - `AppFeature` observed `@Shared` settings through `Observations { … }`
   (macOS 26); it now uses swift-sharing's `Shared.publisher` with
-  `removeDuplicates()`, applying the current value first to keep the
-  "emit initial, then changes" semantics.
+  `removeDuplicates()` (the publisher already replays the current value).
 
 ## Swift runtime / stdlib
 
@@ -70,8 +68,23 @@ compatibility code lives.
 fails unless `lipo` reports both slices and `vtool` reports `minos 13.0`. The
 zipped app and logs are uploaded as `SwiftyCrow-ventura-<sha>`.
 
-_TODO_: pin `tuist` in `.mise.toml` to the version printed by the first green run.
+## Translation on macOS 13–25
 
-## Known gaps
+Apple's `Translation` framework cannot be driven outside SwiftUI before macOS
+26, so those systems use Google Cloud Translation v2. The API key is entered in
+Settings → Translation and stored in the login Keychain
+(service `dev.PangMo5.SwiftyCrow.translation`); it is sent in the
+`X-Goog-Api-Key` header, never in a URL or log. Without a key the app still
+captures and recognises text and shows a hint pointing to Settings. The
+language list comes from `/v2/languages` (cached) and falls back to a static
+list that always includes Arabic. `translation.provider` in `config.toml`
+selects `apple` (26+) or `google`.
 
-_TODO_
+## Known gaps on macOS 13
+
+- No Apple document-layout recognition: paragraph grouping, alignment and
+  vertical CJK detection are inferred from geometry (`VenturaOCRLayout`).
+- `TranslationStrategy` (low latency / high fidelity) only affects Apple
+  Translation; Google ignores it.
+- Styled (attributed) translation alignment is Apple-only (macOS 26.4).
+- Liquid Glass is approximated with `.ultraThinMaterial`.
