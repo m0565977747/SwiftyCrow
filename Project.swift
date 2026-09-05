@@ -25,6 +25,11 @@ let baseSettings: SettingsDictionary = [
   // Hardened Runtime is turned back on by the release archive (for notarization);
   // off locally so debug builds sign cleanly without provisioning friction.
   "ENABLE_HARDENED_RUNTIME": "NO",
+  // Ventura backport: the app must run on Intel Macs, so always build a
+  // Universal 2 binary (arm64 + x86_64) and never strip the inactive slice.
+  "ARCHS": "arm64 x86_64",
+  "ONLY_ACTIVE_ARCH": "NO",
+  "MACOSX_DEPLOYMENT_TARGET": "13.0",
 ]
 
 let signingSettings: SettingsDictionary = [
@@ -44,7 +49,7 @@ let project = Project(
       destinations: .macOS,
       product: .app,
       bundleId: "\(bundleIdPrefix).SwiftyCrow",
-      deploymentTargets: .macOS("26.0"),
+      deploymentTargets: .macOS("13.0"),
       infoPlist: .extendingDefault(with: [
         "CFBundleShortVersionString": "$(MARKETING_VERSION)",
         "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
@@ -108,7 +113,7 @@ let project = Project(
       destinations: .macOS,
       product: .unitTests,
       bundleId: "\(bundleIdPrefix).SwiftyCrowTests",
-      deploymentTargets: .macOS("26.0"),
+      deploymentTargets: .macOS("13.0"),
       infoPlist: .default,
       sources: ["Tests/**"],
       dependencies: [
