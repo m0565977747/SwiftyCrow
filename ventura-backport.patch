@@ -1,4 +1,4 @@
-From 2f0dd357516795a194ea8839de288e5a9d73b463 Mon Sep 17 00:00:00 2001
+From 77edeb584d9852f8d46cae184a7cee98b020fa90 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 12:47:56 +0000
 Subject: [PATCH 01/10] build: lower deployment target to macOS 13.0 and force
@@ -52,7 +52,7 @@ index 28f3d9c..f386453 100644
 2.43.0
 
 
-From 336cab3aefa0c0ceeaf449b5856ec49da5170760 Mon Sep 17 00:00:00 2001
+From ab9c94cd603485067db9196248be95e544b0cd1f Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 12:55:19 +0000
 Subject: [PATCH 02/10] feat(capture): add SCStream-based single-frame capture
@@ -511,7 +511,7 @@ index 0000000..2e77cbf
 2.43.0
 
 
-From addbbd72014af913698ffae2ef9ecad419046908 Mon Sep 17 00:00:00 2001
+From 7c93f1d09d03080946b201b6a6c8906ab9ecd9ed Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 12:57:28 +0000
 Subject: [PATCH 03/10] feat(ocr): add macOS 13 Ventura recognition pipeline
@@ -2044,7 +2044,7 @@ index 0000000..46ea6d4
 2.43.0
 
 
-From 4d3a44a4cf2cd5ed3b55d83c98220248c5f940da Mon Sep 17 00:00:00 2001
+From a8747146f31c22d9b5f15f745d472d18f3312894 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:02:02 +0000
 Subject: [PATCH 04/10] feat(translation): add provider abstraction with Google
@@ -3792,7 +3792,7 @@ index 0000000..ab0b5c4
 2.43.0
 
 
-From 6da98f2fe30ade3be8bd2b2080bdc174212b13d6 Mon Sep 17 00:00:00 2001
+From 066a900b7d747fed425b3367b1bb0ab1545709fb Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:03:46 +0000
 Subject: [PATCH 05/10] backport: macOS 13 availability shims, Perception
@@ -3843,7 +3843,7 @@ Claude-Session: https://claude.ai/code/session_015SN3yT97jK8sWhBx4KgSJn
  Sources/App/MenuBarContent.swift              |  23 +-
  Sources/Capture/CaptureView.swift             |  53 ++--
  Sources/Capture/RegionResultView.swift        |  50 ++--
- Sources/Compat/CompatGlass.swift              | 101 ++++++++
+ Sources/Compat/CompatGlass.swift              | 101 +++++++
  Sources/Compat/CompatWindowDrag.swift         |  52 ++++
  Sources/Models/OCRResult.swift                |  12 +-
  Sources/Models/OverlayLine.swift              |   2 +-
@@ -3853,11 +3853,11 @@ Claude-Session: https://claude.ai/code/session_015SN3yT97jK8sWhBx4KgSJn
  Sources/Overlay/OverlayView.swift             |  13 +-
  Sources/Overlay/OverlayWindowController.swift |  90 ++++---
  Sources/Overlay/TranslationOverlayLayer.swift |  33 ++-
- Sources/Settings/SettingsView.swift           | 242 ++++++++++--------
+ Sources/Settings/SettingsView.swift           | 248 ++++++++++--------
  Sources/Settings/ShortcutRecorder.swift       |   2 +-
  Tuist/Package.swift                           |   3 +
  docs/VENTURA-BACKPORT.md                      |  77 ++++++
- 22 files changed, 712 insertions(+), 240 deletions(-)
+ 22 files changed, 716 insertions(+), 242 deletions(-)
  create mode 100644 .github/workflows/build.yml
  create mode 100644 Sources/Compat/CompatGlass.swift
  create mode 100644 Sources/Compat/CompatWindowDrag.swift
@@ -4848,7 +4848,7 @@ index 9f4785b..7feb70f 100644
          style: .continuous
        ))
 diff --git a/Sources/Settings/SettingsView.swift b/Sources/Settings/SettingsView.swift
-index 2d448d8..5e5c86e 100644
+index e226620..d63dd3b 100644
 --- a/Sources/Settings/SettingsView.swift
 +++ b/Sources/Settings/SettingsView.swift
 @@ -3,6 +3,7 @@
@@ -4968,38 +4968,59 @@ index 2d448d8..5e5c86e 100644
      }
    }
  
-@@ -185,18 +192,20 @@ private struct LiveCaptureSection: View {
+@@ -187,21 +194,23 @@ private struct TranslationSection: View {
+   let store: StoreOf<SettingsFeature>
  
- private struct TranslationSection: View {
    var body: some View {
+-    TranslationProviderSection(store: store)
++    WithPerceptionTracking {
++      TranslationProviderSection(store: store)
+ 
 -    Section {
 -      Picker("Strategy", selection: Binding($settings.translation.strategy)) {
 -        ForEach(TranslationStrategy.allCases) { strategy in
 -          Text(strategy.displayName).tag(strategy)
-+    WithPerceptionTracking {
 +      Section {
 +        Picker("Strategy", selection: Binding($settings.translation.strategy)) {
 +          ForEach(TranslationStrategy.allCases) { strategy in
 +            Text(strategy.displayName).tag(strategy)
 +          }
          }
++        .disabled(TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) != .apple)
 +      } header: {
 +        Text("Translation")
 +      } footer: {
-+        Text("High fidelity uses Apple Intelligence on devices that support it (macOS 26.4+).")
++        Text("High fidelity uses Apple Intelligence on devices that support it (macOS 26.4+). Applies to Apple Translation only.")
 +          .font(.caption)
 +          .foregroundStyle(.secondary)
        }
+-      .disabled(TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) != .apple)
 -    } header: {
 -      Text("Translation")
 -    } footer: {
--      Text("High fidelity uses Apple Intelligence on devices that support it (macOS 26.4+).")
+-      Text("High fidelity uses Apple Intelligence on devices that support it (macOS 26.4+). Applies to Apple Translation only.")
 -        .font(.caption)
 -        .foregroundStyle(.secondary)
      }
    }
  
-@@ -211,21 +220,23 @@ private struct OverlaySection: View {
+@@ -220,6 +229,7 @@ private struct TranslationProviderSection: View {
+   let store: StoreOf<SettingsFeature>
+ 
+   var body: some View {
++    WithPerceptionTracking {
+     Section {
+       Picker("Provider", selection: Binding(
+         get: { TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) },
+@@ -265,6 +275,7 @@ private struct TranslationProviderSection: View {
+       .font(.caption)
+       .foregroundStyle(.secondary)
+     }
++    }
+   }
+ 
+   // MARK: Private
+@@ -280,21 +291,23 @@ private struct OverlaySection: View {
    // MARK: Internal
  
    var body: some View {
@@ -5036,7 +5057,7 @@ index 2d448d8..5e5c86e 100644
      }
    }
  
-@@ -242,31 +253,33 @@ private struct ShortcutsSection: View {
+@@ -311,31 +324,33 @@ private struct ShortcutsSection: View {
    // MARK: Internal
  
    var body: some View {
@@ -5094,7 +5115,7 @@ index 2d448d8..5e5c86e 100644
      }
    }
  
-@@ -317,24 +330,26 @@ private struct UpdatesSection: View {
+@@ -386,24 +401,26 @@ private struct UpdatesSection: View {
    let store: StoreOf<SettingsFeature>
  
    var body: some View {
@@ -5137,7 +5158,7 @@ index 2d448d8..5e5c86e 100644
      }
    }
  
-@@ -499,11 +514,26 @@ private struct LegalDocumentView: View {
+@@ -568,11 +585,26 @@ private struct LegalDocumentView: View {
                .padding()
            }
          } else if let loadErrorMessage {
@@ -5283,7 +5304,7 @@ index 0000000..af6c614
 2.43.0
 
 
-From cd306305ab086f6e1c4434e7ebfe57d9905f3f94 Mon Sep 17 00:00:00 2001
+From 1fe8c3a51bc41a3f68c4a3cfd99f0e340d7ea1b5 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:05:14 +0000
 Subject: [PATCH 06/10] fix(hint): observe dismissal and provider through
@@ -5323,7 +5344,7 @@ index c32d5f2..b13f527 100644
 2.43.0
 
 
-From 7d4d56ecaf97fc4cb35e7bc1789e07e01208c652 Mon Sep 17 00:00:00 2001
+From d1df5d3261156e56b53696f9569713f65ccd5fa0 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:10:48 +0000
 Subject: [PATCH 07/10] review(translation): fix TranslationProviderSection
@@ -5438,7 +5459,7 @@ index d63dd3b..3eea785 100644
 2.43.0
 
 
-From 3ddc441d2b56b74bb35ddabf57d5425f18888a63 Mon Sep 17 00:00:00 2001
+From 8128d3c20f7077f6e774d61abc39c5e4d5beea66 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:13:49 +0000
 Subject: [PATCH 08/10] review(compat): drop duplicate initial apply of shared
@@ -5501,7 +5522,7 @@ index 37404cd..d897896 100644
 2.43.0
 
 
-From 4cde4958a0a8ba43c2fdc6ac3ca392716fe0dc51 Mon Sep 17 00:00:00 2001
+From 54150a15532559ace9293a50ff5c2986de3459bc Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:14:58 +0000
 Subject: [PATCH 09/10] docs: describe the Ventura compatibility layer
@@ -5579,7 +5600,7 @@ index af6c614..b8eb515 100644
 2.43.0
 
 
-From 1baef75ffe76159075c10c767f17669cd8a2fffc Mon Sep 17 00:00:00 2001
+From ac75824b52381bf271761b81aecd50413167a5f2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 16:35:30 +0000
 Subject: [PATCH 10/10] ci: publish every build as a pre-release so assets can
