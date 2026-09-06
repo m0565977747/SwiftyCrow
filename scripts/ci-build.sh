@@ -72,6 +72,21 @@ echo "== Package =="
 APP="DerivedData/Build/Products/Release/SwiftyCrow.app"
 ditto -c -k --keepParent "$APP" SwiftyCrow-ventura.zip
 
+echo "== Build (Debug, for tests) =="
+# `xcodebuild test` on the Tuist-generated scheme only resolves the two
+# explicit package dependencies, not the ~50 implicit ones the app links, so
+# the Debug frameworks must exist in DerivedData before the test action runs.
+xcodebuild build \
+  -workspace SwiftyCrow.xcworkspace \
+  -scheme SwiftyCrow \
+  -configuration Debug \
+  -destination 'generic/platform=macOS' \
+  -derivedDataPath DerivedData \
+  CODE_SIGN_IDENTITY=- \
+  CODE_SIGN_STYLE=Manual \
+  DEVELOPMENT_TEAM="" \
+  2>&1 | tee debug-build.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+
 echo "== Test (Debug) =="
 set +e
 xcodebuild test \
