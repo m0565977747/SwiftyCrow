@@ -68,6 +68,10 @@ let project = Project(
         "SUFeedURL": "https://pangmo5.dev/SwiftyCrow/appcast.xml",
         "SUEnableAutomaticChecks": true,
         "SUPublicEDKey": "$(SPARKLE_PUBLIC_ED_KEY)",
+        // The Ollama translation provider talks plain HTTP to a local server
+        // (default 127.0.0.1:11434, user-configurable to a LAN host); ATS
+        // only exempts that with this key. Public hosts stay HTTPS-only.
+        "NSAppTransportSecurity": ["NSAllowsLocalNetworking": true],
       ]),
       sources: ["Sources/**"],
       resources: [

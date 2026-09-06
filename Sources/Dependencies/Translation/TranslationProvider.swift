@@ -60,18 +60,20 @@ enum TranslationProviderError: Error, LocalizedError, Sendable {
   /// The backend cannot translate between the requested languages.
   case unsupportedLanguagePair
 
+  // Messages stay provider-neutral: the same cases are thrown by every
+  // backend, and the UI names the selected provider where that matters.
   var errorDescription: String? {
     switch self {
     case .missingCredential:
       "Google Cloud Translation API key is missing. Add one under Settings → Translation."
     case .network(let underlying):
-      "Couldn't reach Google Cloud Translation: \(underlying.localizedDescription)"
+      "Couldn't reach the translation service: \(underlying.localizedDescription)"
     case .api(let code, let message):
-      "Google Cloud Translation error \(code): \(message)"
+      "Translation service error \(code): \(message)"
     case .rateLimited:
-      "Google Cloud Translation quota exceeded. Try again in a moment."
+      "The translation service is rate-limiting requests. Try again in a moment."
     case .unsupportedLanguagePair:
-      "Google Cloud Translation doesn't support this language pair."
+      "The translation service doesn't support this language pair."
     }
   }
 }

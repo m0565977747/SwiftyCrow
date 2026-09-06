@@ -153,13 +153,20 @@ struct TranslationSettings: Codable, Equatable, Sendable {
     let d = TranslationSettings()
     provider = try c.decodeIfPresent(TranslationProviderID.self, forKey: .provider) ?? d.provider
     strategy = try c.decodeIfPresent(TranslationStrategy.self, forKey: .strategy) ?? d.strategy
+    ollamaEndpoint = try c.decodeIfPresent(String.self, forKey: .ollamaEndpoint) ?? d.ollamaEndpoint
+    ollamaModel = try c.decodeIfPresent(String.self, forKey: .ollamaModel) ?? d.ollamaModel
   }
 
   /// Which translation backend runs the batches. Apple Translation needs
-  /// macOS 26; older systems fall back to Google Cloud Translation, which
-  /// needs an API key stored in the Keychain (see `TranslationCredentialClient`).
+  /// macOS 26; older systems default to the free public Google Translate
+  /// endpoint, with Google Cloud Translation (API key in the Keychain, see
+  /// `TranslationCredentialClient`) and a local Ollama model as alternatives.
   var provider = TranslationProviderID.platformDefault
   var strategy = TranslationStrategy.lowLatency
+  /// Base URL of the Ollama server used by the `.ollama` provider.
+  var ollamaEndpoint = "http://127.0.0.1:11434"
+  /// Ollama model tag used by the `.ollama` provider (`ollama pull <model>`).
+  var ollamaModel = "gemma3:4b"
 }
 
 // MARK: - TranslationProviderID
@@ -167,26 +174,30 @@ struct TranslationSettings: Codable, Equatable, Sendable {
 enum TranslationProviderID: String, Codable, Equatable, Sendable, CaseIterable, Identifiable {
   case apple
   case google
+  case googleWeb
+  case ollama
 
   // MARK: Internal
 
   /// Apple Translation is only reachable through `TranslationSession` on
-  /// macOS 26+, so older systems default to Google.
+  /// macOS 26+, so older systems default to the free public Google Translate
+  /// endpoint, which needs no key.
   static var platformDefault: TranslationProviderID {
     if #available(macOS 26.0, *) {
       return .apple
     }
-    return .google
+    return .googleWeb
   }
 
   /// The providers this system can actually run — what the Settings picker
   /// offers. A config written on macOS 26 that names `.apple` still parses on
-  /// older systems; `TranslationProviderSelection` resolves it to Google.
+  /// older systems; `TranslationProviderSelection` resolves it to the
+  /// platform default.
   static var availableCases: [TranslationProviderID] {
     if #available(macOS 26.0, *) {
       return allCases
     }
-    return [.google]
+    return [.googleWeb, .google, .ollama]
   }
 
   var id: String {
@@ -197,6 +208,8 @@ enum TranslationProviderID: String, Codable, Equatable, Sendable, CaseIterable, 
     switch self {
     case .apple: "Apple Translation (on-device)"
     case .google: "Google Cloud Translation"
+    case .googleWeb: "Google Translate (free, unofficial)"
+    case .ollama: "Ollama (local model, offline)"
     }
   }
 }

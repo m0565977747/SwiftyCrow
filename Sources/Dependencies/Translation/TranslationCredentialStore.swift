@@ -55,7 +55,7 @@ enum KeychainCredentialStore {
 
   static func account(for provider: TranslationProviderID) -> String? {
     switch provider {
-    case .apple: nil
+    case .apple, .googleWeb, .ollama: nil
     case .google: "google-cloud-api-key"
     }
   }

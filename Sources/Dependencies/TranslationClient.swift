@@ -95,13 +95,16 @@ enum TranslationTextStructure {
 // MARK: - TranslationProviderSelection
 
 /// Picks the backend for the current settings and system. Apple Translation
-/// needs macOS 26; anything else — or an explicit choice — is Google.
+/// needs macOS 26; a config naming it on an older system resolves to the
+/// platform default (the free Google Translate endpoint). Every other choice
+/// runs everywhere.
 enum TranslationProviderSelection {
   static func resolvedID(preferred: TranslationProviderID) -> TranslationProviderID {
-    if #available(macOS 26.0, *), preferred == .apple {
+    guard preferred == .apple else { return preferred }
+    if #available(macOS 26.0, *) {
       return .apple
     }
-    return .google
+    return TranslationProviderID.platformDefault
   }
 
   /// The provider to use right now, built from the shared settings and the
@@ -110,10 +113,23 @@ enum TranslationProviderSelection {
     @Shared(.settings) var settings
     @Dependency(\.translationCredential) var translationCredential
     let id = resolvedID(preferred: settings.translation.provider)
-    if #available(macOS 26.0, *), id == .apple {
-      return AppleTranslationProvider()
+    switch id {
+    case .apple:
+      if #available(macOS 26.0, *) {
+        return AppleTranslationProvider()
+      }
+      // `resolvedID` never returns `.apple` here; keep the switch exhaustive.
+      return GoogleWebTranslationProvider()
+    case .google:
+      return GoogleCloudTranslationProvider(apiKey: translationCredential.apiKey(.google))
+    case .googleWeb:
+      return GoogleWebTranslationProvider()
+    case .ollama:
+      return OllamaTranslationProvider(
+        endpoint: settings.translation.ollamaEndpoint,
+        model: settings.translation.ollamaModel
+      )
     }
-    return GoogleCloudTranslationProvider(apiKey: translationCredential.apiKey(.google))
   }
 }
 

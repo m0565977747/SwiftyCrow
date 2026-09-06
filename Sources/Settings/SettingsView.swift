@@ -220,8 +220,9 @@ private struct TranslationSection: View {
 
 // MARK: - TranslationProviderSection
 
-/// Backend picker plus the Google Cloud Translation API key. The key field is
-/// a draft: it is written to the Keychain on Save and never shown back.
+/// Backend picker plus the per-provider configuration: the Google Cloud
+/// Translation API key (a draft — written to the Keychain on Save and never
+/// shown back) or the Ollama endpoint and model.
 private struct TranslationProviderSection: View {
 
   // MARK: Internal
@@ -232,45 +233,41 @@ private struct TranslationProviderSection: View {
     WithPerceptionTracking {
       Section {
         Picker("Provider", selection: Binding(
-          get: { TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) },
+          get: { selectedProvider },
           set: { store.send(.translationProviderChanged($0)) }
         )) {
           ForEach(TranslationProviderID.availableCases) { provider in
             Text(provider.displayName).tag(provider)
           }
         }
-        LabeledContent("Google API key") {
-          HStack(spacing: 8) {
-            SecureField(
-              store.hasGoogleAPIKey ? "Saved in Keychain — enter a new key to replace" : "Paste your Cloud Translation API key",
-              text: Binding(
-                get: { store.googleAPIKeyDraft },
-                set: { store.send(.googleAPIKeyChanged($0)) }
-              )
-            )
+        switch selectedProvider {
+        case .google:
+          googleAPIKeyRow
+        case .ollama:
+          TextField("Ollama endpoint", text: Binding($settings.translation.ollamaEndpoint), prompt: Text("http://127.0.0.1:11434"))
             .textFieldStyle(.roundedBorder)
-            .frame(minWidth: 220)
-            .onSubmit { store.send(.saveGoogleAPIKey) }
-            Button("Save") { store.send(.saveGoogleAPIKey) }
-              .disabled(store.googleAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            if store.hasGoogleAPIKey {
-              Button("Remove") { store.send(.removeGoogleAPIKey) }
-            }
-          }
-        }
-        if let error = store.googleAPIKeyError {
-          Text(error)
-            .font(.caption)
-            .foregroundStyle(.red)
+          TextField("Model", text: Binding($settings.translation.ollamaModel), prompt: Text("gemma3:4b"))
+            .textFieldStyle(.roundedBorder)
+        case .apple, .googleWeb:
+          EmptyView()
         }
       } header: {
         Text("Provider")
       } footer: {
         VStack(alignment: .leading, spacing: 4) {
-          Text(store.hasGoogleAPIKey ? "A Google API key is stored in your Keychain." : "No Google API key stored.")
-          Text(
-            "Get a key at console.cloud.google.com → APIs & Services → Credentials; enable Cloud Translation API. Apple Translation requires macOS 26."
-          )
+          switch selectedProvider {
+          case .apple:
+            Text("On-device Apple Translation. Languages are downloaded under System Settings → General → Language & Region → Translation Languages.")
+          case .google:
+            Text(store.hasGoogleAPIKey ? "A Google API key is stored in your Keychain." : "No Google API key stored.")
+            Text(
+              "Get a key at console.cloud.google.com → APIs & Services → Credentials; enable Cloud Translation API. Billing must be enabled; the first 500,000 characters a month are free."
+            )
+          case .googleWeb:
+            Text("Unofficial public endpoint — free, no key, may be rate-limited; not for heavy use.")
+          case .ollama:
+            Text("Runs a local model through Ollama (ollama.com) — free and offline. Install Ollama, run `ollama pull \(settings.translation.ollamaModel)`, and keep `ollama serve` running.")
+          }
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -281,6 +278,38 @@ private struct TranslationProviderSection: View {
   // MARK: Private
 
   @Shared(.settings) private var settings
+
+  private var selectedProvider: TranslationProviderID {
+    TranslationProviderSelection.resolvedID(preferred: settings.translation.provider)
+  }
+
+  @ViewBuilder
+  private var googleAPIKeyRow: some View {
+    LabeledContent("Google API key") {
+      HStack(spacing: 8) {
+        SecureField(
+          store.hasGoogleAPIKey ? "Saved in Keychain — enter a new key to replace" : "Paste your Cloud Translation API key",
+          text: Binding(
+            get: { store.googleAPIKeyDraft },
+            set: { store.send(.googleAPIKeyChanged($0)) }
+          )
+        )
+        .textFieldStyle(.roundedBorder)
+        .frame(minWidth: 220)
+        .onSubmit { store.send(.saveGoogleAPIKey) }
+        Button("Save") { store.send(.saveGoogleAPIKey) }
+          .disabled(store.googleAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        if store.hasGoogleAPIKey {
+          Button("Remove") { store.send(.removeGoogleAPIKey) }
+        }
+      }
+    }
+    if let error = store.googleAPIKeyError {
+      Text(error)
+        .font(.caption)
+        .foregroundStyle(.red)
+    }
+  }
 
 }
 

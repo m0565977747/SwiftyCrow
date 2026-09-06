@@ -22,7 +22,7 @@ compatibility code lives.
 | Folder | Purpose |
 | --- | --- |
 | `Sources/Compat/` | SwiftUI / AppKit shims for APIs newer than macOS 13 (`compatGlass`, `compatProminentButtonStyle`, `compatWindowDrag`). |
-| `Sources/Dependencies/Translation/` | `TranslationProvider` protocol + `AppleTranslationProvider` (macOS 26, original code) + `GoogleCloudTranslationProvider` (Cloud Translation v2 over `URLSession`) + `TranslationCredentialStore` (Keychain). `TranslationClient` keeps all shared post-processing and only picks the provider. |
+| `Sources/Dependencies/Translation/` | `TranslationProvider` protocol + `AppleTranslationProvider` (macOS 26, original code) + `GoogleCloudTranslationProvider` (Cloud Translation v2 over `URLSession`) + `GoogleWebTranslationProvider` (free public endpoint) + `OllamaTranslationProvider` (local LLM) + `TranslationCredentialStore` (Keychain). `TranslationClient` keeps all shared post-processing and only picks the provider. |
 | `Sources/Dependencies/OCR/` | `ModernOCRPipeline` (macOS 26, `RecognizeDocumentsRequest`, original code) and `VenturaOCRPipeline` (`VNRecognizeTextRequest` revision 3 via `ClassicVisionTextRecognizer`), with `VenturaOCRLayout` synthesising paragraph groups / alignment / vertical-CJK geometrically. `VisionWarmUp` is shared. |
 | `Sources/Dependencies/Capture/` | `VenturaSingleFrameCapture`: one-shot `SCStream` that returns the first complete frame and stops, used where `SCScreenshotManager` (macOS 14) is unavailable. Filters, display selection, Retina scaling and own-window exclusion are unchanged. |
 
@@ -71,20 +71,25 @@ zipped app and logs are uploaded as `SwiftyCrow-ventura-<sha>`.
 ## Translation on macOS 13–25
 
 Apple's `Translation` framework cannot be driven outside SwiftUI before macOS
-26, so those systems use Google Cloud Translation v2. The API key is entered in
-Settings → Translation and stored in the login Keychain
-(service `dev.PangMo5.SwiftyCrow.translation`); it is sent in the
-`X-Goog-Api-Key` header, never in a URL or log. Without a key the app still
-captures and recognises text and shows a hint pointing to Settings. The
-language list comes from `/v2/languages` (cached) and falls back to a static
-list that always includes Arabic. `translation.provider` in `config.toml`
-selects `apple` (26+) or `google`.
+26, so those systems pick one of three network/local backends behind the same
+`TranslationProvider` protocol. `translation.provider` in `config.toml`
+selects it (`apple` is accepted on older systems and resolves to `googleWeb`):
+
+| `provider` | Backend | Cost / setup | Trade-offs |
+| --- | --- | --- | --- |
+| `googleWeb` (default on 13–25) | `GoogleWebTranslationProvider` — the public `translate.googleapis.com/translate_a/single` (`client=gtx`) endpoint used by the Google Translate widget. | Free, no account or key. | Unofficial and undocumented: may be rate-limited (429), blocked, or change shape at any time; one GET per line (4 in flight); not for heavy or commercial use. Same static language list as the Cloud provider (includes Arabic). |
+| `google` | `GoogleCloudTranslationProvider` — Cloud Translation v2 over `URLSession`. | Google Cloud project with billing enabled and an API key (500k characters/month free tier). | Supported, fast, batched (128 segments per POST). The key is entered in Settings → Translation and stored in the login Keychain (service `dev.PangMo5.SwiftyCrow.translation`); it is sent in the `X-Goog-Api-Key` header, never in a URL or log. Language list from `/v2/languages` (cached), static fallback. |
+| `ollama` | `OllamaTranslationProvider` — `POST /api/chat` on a local Ollama server. | Free and offline once a model is pulled (`ollama pull gemma3:4b`, `ollama serve`). | Quality and speed depend on the model and machine; 2 requests in flight, 60 s timeout each. `translation.ollamaEndpoint` (default `http://127.0.0.1:11434`) and `translation.ollamaModel` (default `gemma3:4b`) in `config.toml` or Settings. Plain-HTTP local hosts are allowed through `NSAllowsLocalNetworking`. |
+
+Whichever backend is chosen, the app still captures and recognises text when
+translation fails, and shows a provider-specific hint (missing key, offline /
+rate-limited endpoint, Ollama not running) pointing at Settings.
 
 ## Known gaps on macOS 13
 
 - No Apple document-layout recognition: paragraph grouping, alignment and
   vertical CJK detection are inferred from geometry (`VenturaOCRLayout`).
 - `TranslationStrategy` (low latency / high fidelity) only affects Apple
-  Translation; Google ignores it.
+  Translation; the other providers ignore it.
 - Styled (attributed) translation alignment is Apple-only (macOS 26.4).
 - Liquid Glass is approximated with `.ultraThinMaterial`.

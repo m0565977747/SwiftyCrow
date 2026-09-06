@@ -54,10 +54,11 @@ struct PreparingRecognitionNote: View {
 /// Shown when translation fails because the backend can't serve the request.
 /// With Apple Translation that means the on-device model isn't installed —
 /// the framework only translates languages downloaded in System Settings, so
-/// this links straight there. With Google Cloud Translation (every macOS
-/// before 26) it means the API key is missing or rejected, so it opens the
-/// app's own Settings instead. A "Don't show again" suppresses it for good
-/// once the user gets the point.
+/// this links straight there. With Google Cloud Translation it means the API
+/// key is missing or rejected; with the free Google endpoint the network is
+/// down or rate-limiting; with Ollama the server isn't running. Those open
+/// the app's own Settings instead. A "Don't show again" suppresses it for
+/// good once the user gets the point.
 struct TranslationModelHint: View {
 
   // MARK: Internal
@@ -75,20 +76,34 @@ struct TranslationModelHint: View {
   @Shared(.appStorage(translationModelHintDismissedKey)) private var dismissed = false
   @Shared(.settings) private var settings
 
+  private var provider: TranslationProviderID {
+    TranslationProviderSelection.resolvedID(preferred: settings.translation.provider)
+  }
+
   private var usesAppleTranslation: Bool {
-    TranslationProviderSelection.resolvedID(preferred: settings.translation.provider) == .apple
+    provider == .apple
   }
 
   private var title: String {
-    usesAppleTranslation
-      ? "Translation model not installed"
-      : "Google Cloud Translation API key missing or invalid"
+    switch provider {
+    case .apple: "Translation model not installed"
+    case .google: "Google Cloud Translation API key missing or invalid"
+    case .googleWeb: "Translation service unavailable — check your internet connection"
+    case .ollama: "Ollama isn't running — start it or pick another provider in Settings"
+    }
   }
 
   private var detail: String {
-    usesAppleTranslation
-      ? "Add the language under System Settings → General → Language & Region → Translation Languages, then capture again."
-      : "Add a Cloud Translation API key under SwiftyCrow Settings → Translation, then capture again."
+    switch provider {
+    case .apple:
+      "Add the language under System Settings → General → Language & Region → Translation Languages, then capture again."
+    case .google:
+      "Add a Cloud Translation API key under SwiftyCrow Settings → Translation, then capture again."
+    case .googleWeb:
+      "The free Google Translate endpoint didn't answer (offline, blocked, or rate-limited). Retry in a moment, or choose another provider under SwiftyCrow Settings → Translation."
+    case .ollama:
+      "Run `ollama serve` and pull the model (`ollama pull \(settings.translation.ollamaModel)`), then capture again — or choose another provider under SwiftyCrow Settings → Translation."
+    }
   }
 
   private var content: some View {
