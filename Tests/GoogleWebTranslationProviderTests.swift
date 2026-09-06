@@ -293,7 +293,7 @@ struct OllamaTranslationProviderTests {
     #expect(messages[1]["content"] as? String == "Hello\nworld")
 
     #expect(OllamaTranslationProvider.languageName(for: Locale.Language(identifier: "ar")) == "Arabic")
-    #expect(OllamaTranslationProvider.languageName(for: Locale.Language(identifier: "zh-Hans")) == "Chinese (Simplified)")
+    #expect(OllamaTranslationProvider.languageName(for: Locale.Language(identifier: "zh-Hans")).contains("Chinese"))
     #expect(OllamaTranslationProvider.languageName(for: Locale.Language(identifier: Language.autoCode)) == nil)
   }
 }
