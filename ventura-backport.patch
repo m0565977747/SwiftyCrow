@@ -1,7 +1,7 @@
 From 77edeb584d9852f8d46cae184a7cee98b020fa90 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 12:47:56 +0000
-Subject: [PATCH 01/11] build: lower deployment target to macOS 13.0 and force
+Subject: [PATCH 01/12] build: lower deployment target to macOS 13.0 and force
  Universal 2 archs
 
 Phase 2 of the Ventura backport. Both targets now declare macOS 13.0 and the
@@ -55,7 +55,7 @@ index 28f3d9c..f386453 100644
 From ab9c94cd603485067db9196248be95e544b0cd1f Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 12:55:19 +0000
-Subject: [PATCH 02/11] feat(capture): add SCStream-based single-frame capture
+Subject: [PATCH 02/12] feat(capture): add SCStream-based single-frame capture
  for macOS 13
 
 SCScreenshotManager is macOS 14+ and was the only ScreenCaptureKit call in
@@ -514,7 +514,7 @@ index 0000000..2e77cbf
 From 7c93f1d09d03080946b201b6a6c8906ab9ecd9ed Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 12:57:28 +0000
-Subject: [PATCH 03/11] feat(ocr): add macOS 13 Ventura recognition pipeline
+Subject: [PATCH 03/12] feat(ocr): add macOS 13 Ventura recognition pipeline
  beside the macOS 26 one
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -2047,7 +2047,7 @@ index 0000000..46ea6d4
 From a8747146f31c22d9b5f15f745d472d18f3312894 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:02:02 +0000
-Subject: [PATCH 04/11] feat(translation): add provider abstraction with Google
+Subject: [PATCH 04/12] feat(translation): add provider abstraction with Google
  Cloud Translation for macOS 13
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3795,7 +3795,7 @@ index 0000000..ab0b5c4
 From 066a900b7d747fed425b3367b1bb0ab1545709fb Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:03:46 +0000
-Subject: [PATCH 05/11] backport: macOS 13 availability shims, Perception
+Subject: [PATCH 05/12] backport: macOS 13 availability shims, Perception
  tracking, and Ventura CI
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -5307,7 +5307,7 @@ index 0000000..af6c614
 From 1fe8c3a51bc41a3f68c4a3cfd99f0e340d7ea1b5 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:05:14 +0000
-Subject: [PATCH 06/11] fix(hint): observe dismissal and provider through
+Subject: [PATCH 06/12] fix(hint): observe dismissal and provider through
  WithPerceptionTracking
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
@@ -5347,7 +5347,7 @@ index c32d5f2..b13f527 100644
 From d1df5d3261156e56b53696f9569713f65ccd5fa0 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:10:48 +0000
-Subject: [PATCH 07/11] review(translation): fix TranslationProviderSection
+Subject: [PATCH 07/12] review(translation): fix TranslationProviderSection
  indentation
 
 Re-indent the Section body inside the WithPerceptionTracking wrapper to
@@ -5462,7 +5462,7 @@ index d63dd3b..3eea785 100644
 From 8128d3c20f7077f6e774d61abc39c5e4d5beea66 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:13:49 +0000
-Subject: [PATCH 08/11] review(compat): drop duplicate initial apply of shared
+Subject: [PATCH 08/12] review(compat): drop duplicate initial apply of shared
  settings
 
 swift-sharing's `Shared.publisher` already prepends the current value before
@@ -5525,7 +5525,7 @@ index 37404cd..d897896 100644
 From 54150a15532559ace9293a50ff5c2986de3459bc Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:14:58 +0000
-Subject: [PATCH 09/11] docs: describe the Ventura compatibility layer
+Subject: [PATCH 09/12] docs: describe the Ventura compatibility layer
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 ---
@@ -5603,7 +5603,7 @@ index af6c614..b8eb515 100644
 From ac75824b52381bf271761b81aecd50413167a5f2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 16:35:30 +0000
-Subject: [PATCH 10/11] ci: publish every build as a pre-release so assets can
+Subject: [PATCH 10/12] ci: publish every build as a pre-release so assets can
  be fetched without artifact auth
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
@@ -5655,7 +5655,7 @@ index 9d96f12..0963e35 100644
 From a7a47139dacb5fb96a3ebdea4922db5f30b0a36b Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sun, 6 Sep 2026 13:55:46 +0000
-Subject: [PATCH 11/11] ci: add scripts/ci-build.sh mirroring the workflow's
+Subject: [PATCH 11/12] ci: add scripts/ci-build.sh mirroring the workflow's
  build/verify/publish steps
 
 Lets any workflow (or a developer) run the exact CI pipeline with one
@@ -5791,6 +5791,35 @@ index 0000000..e7a84a0
 +fi
 +status="success"
 +echo "== OK =="
+-- 
+2.43.0
+
+
+From 6ee1e96b55d092da5178205d681bc22205ffaa47 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 6 Sep 2026 15:55:38 +0000
+Subject: [PATCH 12/12] build: link libc++ into the app for the statically
+ linked CTomlPlusPlus
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ Project.swift | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/Project.swift b/Project.swift
+index ccc0688..e164b45 100644
+--- a/Project.swift
++++ b/Project.swift
+@@ -30,6 +30,9 @@ let baseSettings: SettingsDictionary = [
+   "ARCHS": "arm64 x86_64",
+   "ONLY_ACTIVE_ARCH": "NO",
+   "MACOSX_DEPLOYMENT_TARGET": "13.0",
++  // swift-toml's C++ core (CTomlPlusPlus) is linked as a static framework by
++  // Tuist, so the app itself must link the C++ standard library.
++  "OTHER_LDFLAGS": "$(inherited) -lc++",
+ ]
+ 
+ let signingSettings: SettingsDictionary = [
 -- 
 2.43.0
 
