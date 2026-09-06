@@ -1,7 +1,7 @@
 From 77edeb584d9852f8d46cae184a7cee98b020fa90 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 12:47:56 +0000
-Subject: [PATCH 01/10] build: lower deployment target to macOS 13.0 and force
+Subject: [PATCH 01/11] build: lower deployment target to macOS 13.0 and force
  Universal 2 archs
 
 Phase 2 of the Ventura backport. Both targets now declare macOS 13.0 and the
@@ -55,7 +55,7 @@ index 28f3d9c..f386453 100644
 From ab9c94cd603485067db9196248be95e544b0cd1f Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 12:55:19 +0000
-Subject: [PATCH 02/10] feat(capture): add SCStream-based single-frame capture
+Subject: [PATCH 02/11] feat(capture): add SCStream-based single-frame capture
  for macOS 13
 
 SCScreenshotManager is macOS 14+ and was the only ScreenCaptureKit call in
@@ -514,7 +514,7 @@ index 0000000..2e77cbf
 From 7c93f1d09d03080946b201b6a6c8906ab9ecd9ed Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 12:57:28 +0000
-Subject: [PATCH 03/10] feat(ocr): add macOS 13 Ventura recognition pipeline
+Subject: [PATCH 03/11] feat(ocr): add macOS 13 Ventura recognition pipeline
  beside the macOS 26 one
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -2047,7 +2047,7 @@ index 0000000..46ea6d4
 From a8747146f31c22d9b5f15f745d472d18f3312894 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:02:02 +0000
-Subject: [PATCH 04/10] feat(translation): add provider abstraction with Google
+Subject: [PATCH 04/11] feat(translation): add provider abstraction with Google
  Cloud Translation for macOS 13
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -3795,7 +3795,7 @@ index 0000000..ab0b5c4
 From 066a900b7d747fed425b3367b1bb0ab1545709fb Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:03:46 +0000
-Subject: [PATCH 05/10] backport: macOS 13 availability shims, Perception
+Subject: [PATCH 05/11] backport: macOS 13 availability shims, Perception
  tracking, and Ventura CI
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -5307,7 +5307,7 @@ index 0000000..af6c614
 From 1fe8c3a51bc41a3f68c4a3cfd99f0e340d7ea1b5 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:05:14 +0000
-Subject: [PATCH 06/10] fix(hint): observe dismissal and provider through
+Subject: [PATCH 06/11] fix(hint): observe dismissal and provider through
  WithPerceptionTracking
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
@@ -5347,7 +5347,7 @@ index c32d5f2..b13f527 100644
 From d1df5d3261156e56b53696f9569713f65ccd5fa0 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:10:48 +0000
-Subject: [PATCH 07/10] review(translation): fix TranslationProviderSection
+Subject: [PATCH 07/11] review(translation): fix TranslationProviderSection
  indentation
 
 Re-indent the Section body inside the WithPerceptionTracking wrapper to
@@ -5462,7 +5462,7 @@ index d63dd3b..3eea785 100644
 From 8128d3c20f7077f6e774d61abc39c5e4d5beea66 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:13:49 +0000
-Subject: [PATCH 08/10] review(compat): drop duplicate initial apply of shared
+Subject: [PATCH 08/11] review(compat): drop duplicate initial apply of shared
  settings
 
 swift-sharing's `Shared.publisher` already prepends the current value before
@@ -5525,7 +5525,7 @@ index 37404cd..d897896 100644
 From 54150a15532559ace9293a50ff5c2986de3459bc Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 13:14:58 +0000
-Subject: [PATCH 09/10] docs: describe the Ventura compatibility layer
+Subject: [PATCH 09/11] docs: describe the Ventura compatibility layer
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 ---
@@ -5603,7 +5603,7 @@ index af6c614..b8eb515 100644
 From ac75824b52381bf271761b81aecd50413167a5f2 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Sat, 5 Sep 2026 16:35:30 +0000
-Subject: [PATCH 10/10] ci: publish every build as a pre-release so assets can
+Subject: [PATCH 10/11] ci: publish every build as a pre-release so assets can
  be fetched without artifact auth
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
@@ -5648,6 +5648,149 @@ index 9d96f12..0963e35 100644
 +            --target "${{ github.sha }}" \
 +            --title "CI build ${{ github.run_number }} (${STATUS})" \
 +            --notes "Automated Ventura backport build of ${{ github.sha }} — job status: ${STATUS}. Not a supported release."
+-- 
+2.43.0
+
+
+From a7a47139dacb5fb96a3ebdea4922db5f30b0a36b Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 6 Sep 2026 13:55:46 +0000
+Subject: [PATCH 11/11] ci: add scripts/ci-build.sh mirroring the workflow's
+ build/verify/publish steps
+
+Lets any workflow (or a developer) run the exact CI pipeline with one
+command; build.yml is left untouched so a GITHUB_TOKEN push can still
+update the branch (workflow files may not change under that token).
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ scripts/ci-build.sh | 117 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 117 insertions(+)
+ create mode 100755 scripts/ci-build.sh
+
+diff --git a/scripts/ci-build.sh b/scripts/ci-build.sh
+new file mode 100755
+index 0000000..e7a84a0
+--- /dev/null
++++ b/scripts/ci-build.sh
+@@ -0,0 +1,117 @@
++#!/usr/bin/env bash
++# SPDX-FileCopyrightText: 2021-2026 PangMo5 and contributors
++# SPDX-License-Identifier: AGPL-3.0-only
++#
++# Builds the Ventura backport as a Universal 2 (arm64 + x86_64) Release app,
++# runs the unit tests, verifies the binary really targets macOS 13.0, zips the
++# app, and (when GH_TOKEN is set) publishes everything as a pre-release so the
++# assets can be downloaded without Actions-artifact authentication.
++#
++# Usage: scripts/ci-build.sh [run-number]
++set -euo pipefail
++
++RUN_NUMBER="${1:-${GITHUB_RUN_NUMBER:-local}}"
++export TUIST_DEVELOPMENT_TEAM=""
++export TUIST_SPARKLE_PUBLIC_ED_KEY=""
++
++status="failure"
++finish() {
++  if [ -n "${GH_TOKEN:-}" ] && [ -n "${GITHUB_REPOSITORY:-}" ]; then
++    echo "== Publish pre-release (status: $status) =="
++    files=""
++    for f in SwiftyCrow-ventura.zip build.log test.log; do
++      [ -f "$f" ] && files="$files $f"
++    done
++    tag="ci-build-${RUN_NUMBER}"
++    gh release create "$tag" $files \
++      --repo "$GITHUB_REPOSITORY" \
++      --prerelease \
++      --target "$(git rev-parse HEAD)" \
++      --title "CI build ${RUN_NUMBER} (${status})" \
++      --notes "Automated Ventura backport build of $(git rev-parse --short HEAD) — status: ${status}. Not a supported release." || true
++  fi
++}
++trap finish EXIT
++
++echo "== Toolchain =="
++sw_vers
++xcodebuild -version
++swift --version
++tuist version
++
++echo "== Generate =="
++tuist install
++tuist generate --no-open
++
++echo "== Build (Release, Universal 2, macOS 13.0) =="
++set +e
++xcodebuild build \
++  -workspace SwiftyCrow.xcworkspace \
++  -scheme SwiftyCrow \
++  -configuration Release \
++  -destination 'generic/platform=macOS' \
++  -derivedDataPath DerivedData \
++  CODE_SIGN_IDENTITY=- \
++  CODE_SIGN_STYLE=Manual \
++  DEVELOPMENT_TEAM="" \
++  CODE_SIGNING_ALLOWED=YES \
++  ARCHS="arm64 x86_64" \
++  ONLY_ACTIVE_ARCH=NO \
++  MACOSX_DEPLOYMENT_TARGET=13.0 \
++  2>&1 | tee build.log
++build_rc=${PIPESTATUS[0]}
++set -e
++if [ "$build_rc" -ne 0 ] || grep -qE "(^|: )error:" build.log; then
++  echo "::group::Compiler errors"
++  grep -E "(^|: )error:" build.log || true
++  echo "::endgroup::"
++  exit 1
++fi
++
++echo "== Package =="
++APP="DerivedData/Build/Products/Release/SwiftyCrow.app"
++ditto -c -k --keepParent "$APP" SwiftyCrow-ventura.zip
++
++echo "== Test (Debug) =="
++set +e
++xcodebuild test \
++  -workspace SwiftyCrow.xcworkspace \
++  -scheme SwiftyCrow \
++  -configuration Debug \
++  -destination 'platform=macOS' \
++  -derivedDataPath DerivedData \
++  CODE_SIGN_IDENTITY=- \
++  CODE_SIGN_STYLE=Manual \
++  DEVELOPMENT_TEAM="" \
++  2>&1 | tee test.log
++test_rc=${PIPESTATUS[0]}
++set -e
++
++echo "== Verify binary =="
++BIN="$APP/Contents/MacOS/SwiftyCrow"
++test -x "$BIN"
++lipo -info "$BIN"
++vtool -show-build "$BIN" | grep -E "minos|platform"
++/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist"
++for f in $(find "$APP/Contents/Frameworks" -type f -perm +111 -maxdepth 4 2>/dev/null); do
++  echo "$f"; lipo -info "$f" || true
++  vtool -show-build "$f" 2>/dev/null | grep -E "minos" || true
++done
++codesign -dv --verbose=2 "$APP" 2>&1 | head
++codesign --verify --deep --strict "$APP"
++ARCHS="$(lipo -archs "$BIN")"
++case " $ARCHS " in *" x86_64 "*) ;; *) echo "::error::missing x86_64 ($ARCHS)"; exit 1 ;; esac
++case " $ARCHS " in *" arm64 "*) ;; *) echo "::error::missing arm64 ($ARCHS)"; exit 1 ;; esac
++MINOS="$(vtool -show-build "$BIN" | awk '/minos/ { print $2 }' | sort -u | tr '\n' ' ' | sed 's/ *$//')"
++echo "minos: $MINOS"
++[ "$MINOS" = "13.0" ] || { echo "::error::expected minos 13.0, got $MINOS"; exit 1; }
++LSMIN="$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$APP/Contents/Info.plist")"
++[ "$LSMIN" = "13.0" ] || { echo "::error::LSMinimumSystemVersion is $LSMIN"; exit 1; }
++
++if [ "$test_rc" -ne 0 ]; then
++  echo "::error::unit tests failed (see test.log)"
++  status="build-ok-tests-failed"
++  exit 1
++fi
++status="success"
++echo "== OK =="
 -- 
 2.43.0
 
