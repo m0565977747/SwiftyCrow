@@ -30,6 +30,9 @@ let baseSettings: SettingsDictionary = [
   "ARCHS": "arm64 x86_64",
   "ONLY_ACTIVE_ARCH": "NO",
   "MACOSX_DEPLOYMENT_TARGET": "13.0",
+  // swift-toml's C++ core (CTomlPlusPlus) is linked as a static framework by
+  // Tuist, so the app itself must link the C++ standard library.
+  "OTHER_LDFLAGS": "$(inherited) -lc++",
 ]
 
 let signingSettings: SettingsDictionary = [
