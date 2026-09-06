@@ -3,6 +3,7 @@
 
 import ComposableArchitecture
 import DependenciesMacros
+import Foundation
 import Sparkle
 
 // MARK: - UpdaterClient
@@ -21,6 +22,22 @@ struct UpdaterClient {
 
 extension UpdaterClient: DependencyKey {
   static let liveValue: UpdaterClient = {
+    // Sparkle refuses to start without an EdDSA public key and shows an
+    // "Unable to Check For Updates" alert at launch. Builds made without the
+    // key (CI / local builds of the Ventura backport) simply have no updater.
+    let publicKey = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String ?? ""
+    guard !publicKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      return UpdaterClient(
+        canCheckForUpdates: {
+          AsyncStream { continuation in
+            continuation.yield(false)
+            continuation.finish()
+          }
+        },
+        checkForUpdates: {},
+        configure: { _, _ in }
+      )
+    }
     let controller = SPUStandardUpdaterController(
       startingUpdater: true,
       updaterDelegate: nil,
