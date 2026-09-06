@@ -1,4 +1,57 @@
 name: Bootstrap ventura-backport
-on: {push: {branches: [bootstrap]}, workflow_dispatch: {}}
-permissions: {contents: write, actions: write}
-jobs: {apply: {runs-on: ubuntu-latest, steps: [{uses: actions/checkout@v4, with: {fetch-depth: 0}}, {name: Apply patch series onto upstream baseline, run: "set -euo pipefail && git config user.name Memo && git config user.email m0555944425@gmail.com && cp ventura-backport.patch /tmp/series.patch && BASE=1c4d1113dc091da8039303b200fe8bc9db5bcefb && (git fetch origin $BASE || git fetch https://github.com/PangMo5/SwiftyCrow.git $BASE) && git checkout -B ventura-backport $BASE && git am --committer-date-is-author-date /tmp/series.patch && git log --oneline $BASE..HEAD && git push -f origin ventura-backport:m0565977747-patch-1"}, {name: Trigger build, env: {GH_TOKEN: "${{ github.token }}"}, run: "sleep 5 && gh workflow run build.yml --ref m0565977747-patch-1"}]}}
+
+# 1) applies ventura-backport.patch (git format-patch series against upstream
+#    1c4d111) and force-pushes the result to branch m0565977747-patch-1;
+# 2) builds that branch on macOS 26 with scripts/ci-build.sh, which publishes
+#    the app zip and logs as a pre-release.
+on:
+  push:
+    branches:
+      - bootstrap
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply patch series onto upstream baseline
+        run: |
+          set -euo pipefail
+          git config user.name "Memo"
+          git config user.email "m0555944425@gmail.com"
+          cp ventura-backport.patch /tmp/series.patch
+          BASE=1c4d1113dc091da8039303b200fe8bc9db5bcefb
+          git fetch origin "$BASE" || git fetch https://github.com/PangMo5/SwiftyCrow.git "$BASE"
+          git checkout -B ventura-backport "$BASE"
+          git am --committer-date-is-author-date /tmp/series.patch
+          git log --oneline "$BASE"..HEAD
+          git push -f origin ventura-backport:m0565977747-patch-1
+
+  build:
+    needs: apply
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: m0565977747-patch-1
+      - uses: jdx/mise-action@v4
+      - name: Build, test, verify, publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/ci-build.sh "${{ github.run_number }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: SwiftyCrow-ventura-${{ github.run_number }}
+          if-no-files-found: warn
+          path: |
+            SwiftyCrow-ventura.zip
+            build.log
+            test.log
